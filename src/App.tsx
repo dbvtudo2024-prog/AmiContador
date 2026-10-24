@@ -16,16 +16,14 @@ import { SyncShareModal } from './components/SyncShareModal';
 import { SupabaseModal } from './components/SupabaseModal';
 import { SettingsModal } from './components/SettingsModal';
 import { PdfViewerModal } from './components/PdfViewerModal';
+import { MenuDrawerModal } from './components/MenuDrawerModal';
 import {
   FolderOpen,
-  Share2,
-  Settings,
-  Database,
+  Menu,
   Eye,
   Check,
-  FileText,
-  Split,
-  Sparkles,
+  Sun,
+  Moon,
 } from 'lucide-react';
 
 export default function App() {
@@ -35,6 +33,7 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   // Modals
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
   const [isPartsOpen, setIsPartsOpen] = useState(false);
   const [isColorsOpen, setIsColorsOpen] = useState(false);
@@ -125,6 +124,18 @@ export default function App() {
     };
   }, [settings.keepAwake]);
 
+  // Synchronize dark class to <html> and <body> for full-app dark mode
+  useEffect(() => {
+    const isDark = settings.theme === 'dark-crochet';
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.body.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.classList.remove('dark');
+    }
+  }, [settings.theme]);
+
   // Current active project (or null if in Free Counter mode)
   const isFreeMode = activeProjectId === 'free' || !projects.some((p) => p.id === activeProjectId);
   const currentProject = isFreeMode ? null : projects.find((p) => p.id === activeProjectId) || null;
@@ -146,13 +157,14 @@ export default function App() {
     showToast('Contador zerado (Volta 1, Ponto 0)!');
   };
 
-  const handleSaveFreeCounterAsProject = (title: string) => {
-    const newProject = StorageService.convertQuickCounterToProject(title, quickCounter);
+  const handleSaveFreeCounterAsProject = (title: string, partName?: string) => {
+    const newProject = StorageService.convertQuickCounterToProject(title, quickCounter, partName);
     const updated = StorageService.getAllProjects();
     setProjects(updated);
     setActiveProjectId(newProject.id);
     StorageService.setActiveProjectId(newProject.id);
-    showToast(`Projeto "${newProject.title}" criado e salvo no banco!`);
+    const savedPart = newProject.parts[0]?.name || 'Peça Principal';
+    showToast(`Projeto "${newProject.title}" (${savedPart}) salvo com sucesso!`);
   };
 
   // Save changes to current project
@@ -224,7 +236,7 @@ export default function App() {
   // Dummy project fallback for PDF viewer when in free counter mode
   const pdfProjectFallback: AmigurumiProject = currentProject || {
     id: 'free_counter_pdf',
-    title: 'Receita Livre',
+    title: 'Receita Amigurumi',
     patternName: '',
     hookSize: '2.5mm',
     yarnBrand: '',
@@ -249,100 +261,79 @@ export default function App() {
     updatedAt: new Date().toISOString(),
   };
 
-  // Theme wrapper classes
+  // Theme wrapper classes with cozy, non-glare warm linen tone
   const getThemeClass = () => {
-    if (settings.theme === 'dark-crochet') return 'dark bg-stone-950 text-stone-100';
-    if (settings.theme === 'pastel-mint') return 'bg-emerald-50/40 text-stone-800';
-    if (settings.theme === 'soft-rose') return 'bg-pink-50/40 text-stone-800';
-    return 'bg-yarn-pattern text-stone-800';
+    if (settings.theme === 'dark-crochet') return 'dark bg-[#1A1816] text-stone-100';
+    if (settings.theme === 'pastel-mint') return 'bg-[#E5ECE7] text-stone-800';
+    if (settings.theme === 'soft-rose') return 'bg-[#ECE0E3] text-stone-800';
+    return 'bg-[#ECE5D8] text-[#2D2824]';
   };
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-200 ${getThemeClass()}`}>
-      {/* Top Header */}
-      <header className="sticky top-0 z-30 bg-white/85 dark:bg-stone-900/85 backdrop-blur-md border-b border-stone-200 dark:border-stone-800 px-3 sm:px-4 py-2.5 transition-colors">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
-          {/* Brand Logo & Name */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white shadow-md shadow-amber-500/20 shrink-0">
-              <span className="text-lg">🧶</span>
+      {/* Header: Clean, airy, spacious on both mobile and PC (no crowding!) */}
+      <header className="sticky top-0 z-30 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-[#D8CABE] dark:border-stone-800 px-3.5 sm:px-6 py-2 transition-colors shadow-xs">
+        <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
+          {/* Left: Compact brand logo + title + project chip */}
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-[#8C5E47] flex items-center justify-center text-white text-base shadow-xs shrink-0">
+              <span>🧶</span>
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-base font-extrabold tracking-tight text-stone-900 dark:text-stone-50 font-comfortaa leading-none">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-[#2D2824] dark:text-stone-50 font-comfortaa leading-none shrink-0">
                 AmiContador
               </h1>
-              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 tracking-wider uppercase">
-                Crochê & Amigurumi
-              </span>
+              <button
+                onClick={() => setIsProjectsOpen(true)}
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors truncate max-w-[110px] sm:max-w-[180px] cursor-pointer"
+                title="Trocar projeto ou modo livre"
+              >
+                {currentProject ? currentProject.title : 'Livre'} ▼
+              </button>
             </div>
           </div>
 
-          {/* Project / Counter Switcher Pill */}
-          <button
-            onClick={() => setIsProjectsOpen(true)}
-            className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-2xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold transition-all cursor-pointer max-w-[170px] sm:max-w-xs truncate shadow-xs"
-            title="Abrir banco de projetos ou alternar para Contador Livre"
-          >
-            {isFreeMode ? (
-              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            ) : (
-              <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            )}
-            <span className="truncate">{currentProject ? currentProject.title : 'Contador Livre'}</span>
-            <span className="text-[10px] text-stone-400 shrink-0">▼</span>
-          </button>
-
-          {/* Actions */}
-          <div className="flex items-center gap-1 sm:gap-2">
-            {/* PDF Recipe Button */}
+          {/* Right: Quick Dark/Light Theme Toggle + Projetos + Ajustes */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
-              onClick={() => setIsPdfOpen(true)}
-              className="px-2.5 py-1.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:hover:bg-amber-900/80 dark:text-amber-200 border border-amber-300 dark:border-amber-700 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-              title="Abrir ou anexar receita em PDF"
+              onClick={() => {
+                const nextTheme = settings.theme === 'dark-crochet' ? 'warm-yarn' : 'dark-crochet';
+                handleUpdateSettings({ ...settings, theme: nextTheme });
+                showToast(nextTheme === 'dark-crochet' ? 'Tema escuro ativado 🌙' : 'Tema claro (linho) ativado ☀️');
+              }}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-[#FAF5ED] hover:bg-[#EFE8DC] dark:bg-stone-800 dark:hover:bg-stone-700 border border-[#D6C8B8] dark:border-stone-700 text-[#2D2824] dark:text-stone-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title={settings.theme === 'dark-crochet' ? 'Mudar para tema claro (Linho)' : 'Mudar para tema escuro (Noturno)'}
+              aria-label={settings.theme === 'dark-crochet' ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
             >
-              <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <span className="hidden sm:inline">Receita PDF</span>
+              {settings.theme === 'dark-crochet' ? (
+                <>
+                  <Sun className="w-4 h-4 text-amber-400" />
+                  <span className="hidden md:inline">Claro</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="w-4 h-4 text-[#8C5E47]" />
+                  <span className="hidden md:inline">Escuro</span>
+                </>
+              )}
             </button>
 
-            {/* Split screen toggle on PC */}
             <button
-              onClick={() => setIsSplitMode(!isSplitMode)}
-              className={`hidden md:flex p-2 rounded-2xl border transition-colors ${
-                isSplitMode
-                  ? 'bg-amber-500 text-white border-amber-600'
-                  : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700'
-              }`}
-              title={isSplitMode ? 'Desativar tela dividida' : 'Modo Dividido: PDF à esquerda e Contador à direita'}
+              onClick={() => setIsProjectsOpen(true)}
+              className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-[#FAF5ED] hover:bg-[#EFE8DC] dark:bg-stone-800 dark:hover:bg-stone-700 border border-[#D6C8B8] dark:border-stone-700 text-[#2D2824] dark:text-stone-200 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Meus Projetos"
             >
-              <Split className="w-4 h-4" />
+              <FolderOpen className="w-4 h-4 text-[#8C5E47] dark:text-amber-400" />
+              <span className="hidden sm:inline">Projetos</span>
             </button>
 
-            {/* Sync QR / Share button */}
             <button
-              onClick={() => setIsSyncOpen(true)}
-              className="p-2 sm:px-2.5 sm:py-1.5 rounded-2xl bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:hover:bg-purple-900/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs"
-              title="Sincronizar entre PC e celular via QR Code"
+              onClick={() => setIsMenuOpen(true)}
+              className="p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-[#8C5E47] hover:bg-[#724A36] text-white text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs shadow-[#8C5E47]/25"
+              title="Ajustes e Ferramentas"
             >
-              <Share2 className="w-4 h-4" />
-              <span className="hidden lg:inline">Sincronizar</span>
-            </button>
-
-            {/* Supabase button */}
-            <button
-              onClick={() => setIsSupabaseOpen(true)}
-              className="p-2 rounded-2xl text-stone-600 hover:text-emerald-600 dark:text-stone-400 dark:hover:text-emerald-400 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 transition-colors"
-              title="Banco de Dados Supabase (Opcional)"
-            >
-              <Database className="w-4 h-4" />
-            </button>
-
-            {/* Settings button */}
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="p-2 rounded-2xl text-stone-600 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700 transition-colors"
-              title="Preferências e Ajustes"
-            >
-              <Settings className="w-4 h-4" />
+              <Menu className="w-4 h-4" />
+              <span className="hidden sm:inline">Ajustes</span>
             </button>
           </div>
         </div>
@@ -350,16 +341,17 @@ export default function App() {
 
       {/* Main Container - Supports Split View on PC */}
       <main className="flex-1 w-full mx-auto flex flex-col justify-start">
-        {/* Quick status bar */}
+        {/* Screen wake lock notice if active */}
         {settings.keepAwake && (
-          <div className="max-w-4xl mx-auto w-full px-4 pt-3">
-            <div className="px-3 py-1.5 rounded-xl bg-amber-100/70 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-300 text-xs flex items-center justify-between animate-fade-in">
-              <span className="flex items-center gap-1.5 font-medium">
-                <Eye className="w-3.5 h-3.5" /> Modo Crochê Ativo: a tela do seu celular não irá apagar.
+          <div className="max-w-xl mx-auto w-full px-3 pt-2">
+            <div className="px-3 py-1.5 rounded-2xl bg-[#FFF6EE] dark:bg-stone-900 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-300 text-xs flex items-center justify-between shadow-xs">
+              <span className="flex items-center gap-1.5 font-medium text-[11px]">
+                <Eye className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span><strong>Modo Crochê Ativo:</strong> Tela permanecerá ligada.</span>
               </span>
               <button
                 onClick={() => handleUpdateSettings({ ...settings, keepAwake: false })}
-                className="text-[10px] font-bold underline cursor-pointer"
+                className="text-[10px] font-bold text-amber-800 dark:text-amber-400 underline cursor-pointer ml-2 shrink-0"
               >
                 Desativar
               </button>
@@ -369,7 +361,7 @@ export default function App() {
 
         {isSplitMode ? (
           /* Split Screen: PDF on left, Counter on right */
-          <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-65px)] overflow-hidden">
+          <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-56px)] overflow-hidden">
             <div className="w-full md:w-1/2 h-1/2 md:h-full">
               <PdfViewerModal
                 isOpen={false}
@@ -384,7 +376,7 @@ export default function App() {
                 }}
               />
             </div>
-            <div className="w-full md:w-1/2 h-1/2 md:h-full overflow-y-auto p-4 sm:p-6 bg-yarn-pattern dark:bg-stone-950">
+            <div className="w-full md:w-1/2 h-1/2 md:h-full overflow-y-auto p-3 sm:p-6 bg-amigurumi-canvas dark:bg-stone-950">
               {currentProject ? (
                 <CounterView
                   project={currentProject}
@@ -410,8 +402,8 @@ export default function App() {
             </div>
           </div>
         ) : (
-          /* Standard Single Column View */
-          <div className="max-w-4xl w-full mx-auto p-4 sm:p-6">
+          /* Standard Single Column View - Compact padding on mobile so button is high up */
+          <div className="max-w-xl w-full mx-auto px-3 py-2 sm:p-6">
             {currentProject ? (
               <CounterView
                 project={currentProject}
@@ -440,13 +432,26 @@ export default function App() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-stone-900 text-white text-xs font-bold shadow-2xl flex items-center gap-2 border border-stone-700 animate-slide-up">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-[#2D2824] text-white text-xs font-bold shadow-2xl flex items-center gap-2 border border-stone-700 animate-slide-up">
           <Check className="w-4 h-4 text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Modals */}
+      {/* Unified Menu Drawer Modal */}
+      <MenuDrawerModal
+        isOpen={isMenuOpen}
+        onClose={() => setIsMenuOpen(false)}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        onOpenSync={() => setIsSyncOpen(true)}
+        onOpenPdf={() => setIsPdfOpen(true)}
+        onOpenSupabase={() => setIsSupabaseOpen(true)}
+        isSplitMode={isSplitMode}
+        onToggleSplitMode={() => setIsSplitMode(!isSplitMode)}
+      />
+
+      {/* PDF Recipe Modal */}
       <PdfViewerModal
         isOpen={isPdfOpen}
         isSplitMode={false}
@@ -463,6 +468,7 @@ export default function App() {
         }}
       />
 
+      {/* Parts Modal (Project mode only) */}
       {currentProject && (
         <PartManagerModal
           isOpen={isPartsOpen}
@@ -472,6 +478,7 @@ export default function App() {
         />
       )}
 
+      {/* Color Reminders Modal */}
       <ColorRemindersModal
         isOpen={isColorsOpen}
         onClose={() => setIsColorsOpen(false)}
@@ -481,6 +488,7 @@ export default function App() {
         onUpdateReminders={handleUpdateColorReminders}
       />
 
+      {/* Sync / QR Modal */}
       <SyncShareModal
         isOpen={isSyncOpen}
         onClose={() => setIsSyncOpen(false)}
@@ -488,6 +496,7 @@ export default function App() {
         onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
       />
 
+      {/* Supabase Optional Modal */}
       <SupabaseModal
         isOpen={isSupabaseOpen}
         onClose={() => setIsSupabaseOpen(false)}
@@ -495,6 +504,7 @@ export default function App() {
         onRefreshProjects={handleRefreshProjects}
       />
 
+      {/* Project List Modal */}
       <ProjectListModal
         isOpen={isProjectsOpen}
         onClose={() => setIsProjectsOpen(false)}
@@ -505,6 +515,7 @@ export default function App() {
         onRefreshProjects={handleRefreshProjects}
       />
 
+      {/* Settings Modal */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -512,6 +523,7 @@ export default function App() {
         onUpdateSettings={handleUpdateSettings}
       />
 
+      {/* Color Alert Popup */}
       {colorAlert.reminder && (
         <ColorAlertModal
           isOpen={colorAlert.isOpen}

@@ -1,11 +1,21 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @layer base {
   body {
     font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
     -webkit-user-select: none;
+    background-color: #ECE5D8;
+    color: #2D2824;
+  }
+
+  body.dark,
+  html.dark body {
+    background-color: #181614;
+    color: #EDE8E1;
   }
 
   input, textarea, select {
@@ -23,24 +33,68 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Tactile button bounce effect for amigurumi counters */
-.tactile-btn {
+/* Tactile craft button: looks and feels like a real soft clicker */
+.craft-btn-primary {
+  background: linear-gradient(135deg, #C85A32 0%, #B24822 100%);
+  color: white;
+  box-shadow: 0 4px 14px rgba(178, 72, 34, 0.32), inset 0 1px 1px rgba(255, 255, 255, 0.3);
   transition: transform 0.08s ease, box-shadow 0.08s ease;
 }
 
-.tactile-btn:active {
-  transform: scale(0.96) translateY(2px);
+.craft-btn-primary:active {
+  transform: scale(0.97) translateY(2px);
+  box-shadow: 0 2px 6px rgba(178, 72, 34, 0.25);
 }
 
-/* Subtle yarn stitch pattern background */
-.bg-yarn-pattern {
-  background-color: #fbf9f5;
-  background-image: radial-gradient(#e5dfd5 1px, transparent 1px);
-  background-size: 20px 20px;
+.craft-btn-secondary {
+  background-color: #E4DACB;
+  color: #3D352E;
+  border: 1px solid #D4C6B4;
+  transition: transform 0.08s ease, background-color 0.15s ease;
 }
 
-.dark .bg-yarn-pattern {
-  background-color: #141619;
-  background-image: radial-gradient(#2a2f38 1px, transparent 1px);
-  background-size: 20px 20px;
+.craft-btn-secondary:active {
+  transform: scale(0.97);
+  background-color: #D9CEBE;
 }
+
+.dark .craft-btn-secondary {
+  background-color: #2A2622;
+  color: #EDE8E1;
+  border: 1px solid #453E37;
+}
+
+.dark .craft-btn-secondary:active {
+  background-color: #35302A;
+}
+
+/* Cozy craft amigurumi linen background - warm and low glare */
+.bg-amigurumi-canvas {
+  background-color: #ECE5D8;
+  background-image: 
+    radial-gradient(circle at 100% 100%, rgba(200, 90, 50, 0.04) 0, transparent 40%),
+    radial-gradient(circle at 0% 0%, rgba(90, 140, 110, 0.04) 0, transparent 40%),
+    radial-gradient(#D5C9B7 0.9px, transparent 0.9px);
+  background-size: 100% 100%, 100% 100%, 16px 16px;
+}
+
+.dark .bg-amigurumi-canvas {
+  background-color: #181614;
+  background-image: radial-gradient(#2E2A26 0.75px, transparent 0.75px);
+  background-size: 16px 16px;
+  color: #EDE8E1;
+}
+
+/* Stitched border effect for cards with warm linen parchment contrast */
+.stitched-card {
+  background: #FAF5ED;
+  border: 1.5px solid #D6C8B8;
+  box-shadow: 0 2px 10px rgba(50, 42, 34, 0.05);
+}
+
+.dark .stitched-card {
+  background: #23201D;
+  border: 1.5px solid #38322B;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+

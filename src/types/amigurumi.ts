@@ -15,6 +15,7 @@ export interface ProjectPart {
   targetStitches: number;
   isCompleted: boolean;
   roundInstructions?: Record<number, string>;
+  roundStitches?: Record<number, number>;
   colorReminders: ColorReminder[];
   notes?: string;
   order: number;

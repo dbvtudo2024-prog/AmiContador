@@ -11,13 +11,13 @@ import {
   Sparkles,
   CheckCircle2,
   Circle,
-  HelpCircle,
   Hash,
   ChevronRight,
   BellRing,
-  Volume2,
-  VolumeX,
   FileText,
+  Target,
+  Pencil,
+  Check,
 } from 'lucide-react';
 
 interface CounterViewProps {
@@ -41,12 +41,25 @@ export const CounterView: React.FC<CounterViewProps> = ({
 }) => {
   const [jumpRoundInput, setJumpRoundInput] = useState<string>('');
   const [showJumpModal, setShowJumpModal] = useState<boolean>(false);
-  const [editingInstruction, setEditingInstruction] = useState<boolean>(false);
-  const [customInstruction, setCustomInstruction] = useState<string>('');
 
   // Find active part
   const activePart =
     project.parts.find((p) => p.id === project.activePartId) || project.parts[0] || null;
+
+  // Target rounds collapsed state
+  const [isTargetCollapsed, setIsTargetCollapsed] = useState<boolean>(
+    (activePart?.targetRounds || 0) > 0
+  );
+  const [targetInputValue, setTargetInputValue] = useState<string>(
+    activePart && activePart.targetRounds > 0 ? String(activePart.targetRounds) : ''
+  );
+
+  useEffect(() => {
+    if (activePart) {
+      setTargetInputValue(activePart.targetRounds > 0 ? String(activePart.targetRounds) : '');
+      setIsTargetCollapsed(activePart.targetRounds > 0);
+    }
+  }, [activePart?.id]);
 
   // Active color reminder for this round
   const currentColorReminder = activePart?.colorReminders?.find(
@@ -92,9 +105,13 @@ export const CounterView: React.FC<CounterViewProps> = ({
     soundEffects.playRoundChime(settings.soundEnabled, settings.soundVolume);
     soundEffects.vibrate(60, settings.vibrationEnabled);
 
+    // If next round has specific target stitches extracted from recipe
+    const nextStitches = activePart.roundStitches?.[nextRound] || activePart.targetStitches;
+
     updateCurrentPart({
       currentRound: nextRound,
-      currentStitch: 0, // Reset stitch counter for the fresh round
+      currentStitch: 0,
+      targetStitches: nextStitches,
     });
 
     checkColorAlert(nextRound, activePart);
@@ -107,20 +124,31 @@ export const CounterView: React.FC<CounterViewProps> = ({
     soundEffects.playStitchClick(settings.soundEnabled, settings.soundVolume);
     soundEffects.vibrate(30, settings.vibrationEnabled);
 
+    const prevStitches = activePart.roundStitches?.[prevRound] || activePart.targetStitches;
+
     updateCurrentPart({
       currentRound: prevRound,
       currentStitch: 0,
+      targetStitches: prevStitches,
     });
   }, [activePart, settings, updateCurrentPart]);
 
   // Increment Stitch
   const handleIncrementStitch = useCallback(() => {
     if (!activePart) return;
+
+    // Prevent counting past round completion
+    if (activePart.targetStitches > 0 && activePart.currentStitch >= activePart.targetStitches) {
+      if (settings.autoAdvanceRound) {
+        handleIncrementRound();
+      }
+      return;
+    }
+
     const nextStitch = activePart.currentStitch + 1;
     soundEffects.playStitchClick(settings.soundEnabled, settings.soundVolume);
     soundEffects.vibrate(25, settings.vibrationEnabled);
 
-    // If auto-advance enabled and reached target stitches for this round
     if (
       settings.autoAdvanceRound &&
       activePart.targetStitches > 0 &&
@@ -128,7 +156,8 @@ export const CounterView: React.FC<CounterViewProps> = ({
     ) {
       handleIncrementRound();
     } else {
-      updateCurrentPart({ currentStitch: nextStitch });
+      const cappedStitch = activePart.targetStitches > 0 ? Math.min(nextStitch, activePart.targetStitches) : nextStitch;
+      updateCurrentPart({ currentStitch: cappedStitch });
     }
   }, [activePart, settings, updateCurrentPart, handleIncrementRound]);
 
@@ -160,7 +189,15 @@ export const CounterView: React.FC<CounterViewProps> = ({
     setJumpRoundInput('');
   };
 
-  // Mark piece completed with victory celebration
+  const handleConfirmTarget = (num?: number) => {
+    const val = num !== undefined ? num : parseInt(targetInputValue);
+    const valid = isNaN(val) || val < 0 ? 0 : val;
+    updateCurrentPart({ targetRounds: valid });
+    setTargetInputValue(valid > 0 ? String(valid) : '');
+    setIsTargetCollapsed(true);
+  };
+
+  // Mark piece completed with celebration
   const handleCompletePart = () => {
     if (!activePart) return;
     const newState = !activePart.isCompleted;
@@ -175,18 +212,15 @@ export const CounterView: React.FC<CounterViewProps> = ({
           particleCount: 80,
           spread: 70,
           origin: { y: 0.6 },
-          colors: ['#F59E0B', '#EC4899', '#8B5CF6', '#10B981', '#3B82F6'],
+          colors: ['#D97706', '#E11D48', '#8B5CF6', '#059669', '#3B82F6'],
         });
-      } catch {
-        // Confetti handled
-      }
+      } catch {}
     }
   };
 
   // Keyboard shortcut listener for PC crocheters
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
         return;
       }
@@ -215,45 +249,43 @@ export const CounterView: React.FC<CounterViewProps> = ({
 
   if (!activePart) {
     return (
-      <div className="p-8 text-center text-stone-500">
-        Nenhuma peça encontrada. Crie uma peça para começar a contar!
+      <div className="p-8 text-center text-stone-500 font-medium">
+        Nenhuma peça encontrada. Crie uma peça para começar a tecer!
       </div>
     );
   }
 
-  const roundProgress = Math.min(
-    100,
-    Math.round((activePart.currentRound / Math.max(1, activePart.targetRounds)) * 100)
-  );
-
-  const currentRoundInstruction =
-    activePart.roundInstructions?.[activePart.currentRound] || '';
+  const roundProgress = activePart.targetRounds > 0
+    ? Math.min(100, Math.round((activePart.currentRound / activePart.targetRounds) * 100))
+    : 0;
 
   return (
-    <div className="w-full max-w-2xl mx-auto space-y-4 pb-20">
-      {/* 1. Part Selector Carousel */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none px-1">
+    <div className="w-full max-w-xl mx-auto space-y-2.5 sm:space-y-3.5 pb-16">
+      {/* 1. Part Selector Pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none px-0.5">
         {project.parts.map((part) => {
           const isSelected = part.id === activePart.id;
           return (
             <button
               key={part.id}
               onClick={() => onUpdateProject({ ...project, activePartId: part.id })}
-              className={`px-3.5 py-2 rounded-2xl flex items-center gap-2 shrink-0 transition-all text-xs font-bold border cursor-pointer ${
+              className={`px-3 py-1.5 rounded-2xl flex items-center gap-1.5 shrink-0 transition-all text-xs font-bold border cursor-pointer ${
                 isSelected
-                  ? 'bg-amber-500 text-white border-amber-600 shadow-md shadow-amber-500/20 scale-[1.02]'
-                  : 'bg-white dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-700 hover:border-amber-300'
+                  ? 'bg-[#8C5E47] text-white border-[#6F442F] shadow-xs'
+                  : 'bg-[#FAF5ED] dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-[#D6C8B8] dark:border-stone-700 hover:border-[#8C5E47]/50'
               }`}
             >
               {part.isCompleted ? (
-                <CheckCircle2 className={`w-4 h-4 ${isSelected ? 'text-white' : 'text-emerald-500'}`} />
+                <CheckCircle2 className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-emerald-600'}`} />
               ) : (
-                <Circle className="w-3.5 h-3.5 opacity-60" />
+                <Circle className="w-3 h-3 opacity-60" />
               )}
               <span>{part.name}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.5 rounded-full ${
-                  isSelected ? 'bg-amber-600 text-amber-100' : 'bg-stone-100 dark:bg-stone-700 text-stone-500'
+                className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                  isSelected
+                    ? 'bg-[#6F442F] text-amber-100'
+                    : 'bg-[#EDE4D6] dark:bg-stone-700 text-stone-600 dark:text-stone-300'
                 }`}
               >
                 v.{part.currentRound}
@@ -264,259 +296,390 @@ export const CounterView: React.FC<CounterViewProps> = ({
 
         <button
           onClick={onOpenPartsModal}
-          className="p-2 rounded-2xl border border-dashed border-stone-300 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:text-amber-600 hover:border-amber-400 bg-white dark:bg-stone-800 shrink-0 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-          title="Gerenciar todas as peças"
+          className="p-1.5 px-2.5 rounded-2xl border border-dashed border-[#D6C8B8] dark:border-stone-700 text-[#8C5E47] dark:text-amber-400 hover:bg-[#FAF5ED] dark:hover:bg-stone-800 bg-[#FAF5ED] shrink-0 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
+          title="Gerenciar peças do projeto"
         >
-          <Plus className="w-4 h-4" />
-          <span className="hidden sm:inline">Peças</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Nova Peça</span>
         </button>
       </div>
 
-      {/* 2. Color Change Alert Card (When currently on a color change round) */}
-      {currentColorReminder ? (
-        <div className="p-4 rounded-3xl bg-gradient-to-r from-amber-50 to-orange-50 dark:from-stone-900 dark:to-stone-800 border-2 border-amber-400 dark:border-amber-600 shadow-lg shadow-amber-500/10 flex items-center justify-between gap-3 animate-pulse">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div
-              className="w-12 h-12 rounded-2xl shadow-md border-2 border-white dark:border-stone-700 shrink-0 ring-4 ring-amber-300 dark:ring-amber-800 flex items-center justify-center"
-              style={{ backgroundColor: currentColorReminder.colorHex }}
-            >
-              <Sparkles className="w-5 h-5 text-white drop-shadow" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-1">
-                <BellRing className="w-3 h-3" /> Troca de cor nesta volta!
-              </span>
-              <h4 className="text-base font-extrabold text-stone-900 dark:text-stone-100 truncate">
-                {currentColorReminder.colorName}
-              </h4>
-              {currentColorReminder.note && (
-                <p className="text-xs text-amber-800 dark:text-amber-300 truncate font-medium">
-                  💡 {currentColorReminder.note}
-                </p>
+      {/* 2. Target Rounds Setup (Collapsible to keep button high up!) */}
+      {isTargetCollapsed ? (
+        <div className="stitched-card rounded-2xl px-3.5 py-2 flex items-center justify-between text-xs shadow-xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <Target className="w-4 h-4 text-[#C85A32] shrink-0" />
+            <span className="text-[#2D2824] dark:text-stone-200 font-bold truncate">
+              {activePart.targetRounds > 0 ? (
+                <>
+                  Meta: <strong className="text-[#C85A32]">{activePart.targetRounds} voltas</strong>
+                  <span className="text-[11px] text-stone-500 font-normal ml-1">
+                    ({activePart.currentRound} de {activePart.targetRounds})
+                  </span>
+                </>
+              ) : (
+                <span className="text-stone-500">Sem meta de voltas definida</span>
               )}
-            </div>
+            </span>
           </div>
 
           <button
+            type="button"
+            onClick={() => setIsTargetCollapsed(false)}
+            className="text-[11px] font-bold text-[#8C5E47] dark:text-amber-400 hover:underline flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#EDE4D6] dark:bg-stone-800 shrink-0 cursor-pointer transition-colors"
+          >
+            <Pencil className="w-3 h-3" />
+            <span>Alterar</span>
+          </button>
+        </div>
+      ) : (
+        <div className="stitched-card p-3.5 sm:p-4 rounded-3xl space-y-2.5 shadow-xs">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-[#C85A32]/15 text-[#C85A32] flex items-center justify-center shrink-0">
+                <Target className="w-4 h-4" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-[#2D2824] dark:text-stone-200 block font-comfortaa">
+                  Quantas voltas tem esta peça?
+                </label>
+                <p className="text-[10px] sm:text-[11px] text-stone-500 dark:text-stone-400">
+                  {activePart.targetRounds > 0
+                    ? `Meta atual: ${activePart.targetRounds} voltas`
+                    : 'Defina a meta de voltas da receita'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 w-full sm:w-auto">
+              <input
+                type="number"
+                min="0"
+                max="999"
+                placeholder="Ex: 36"
+                value={targetInputValue}
+                onChange={(e) => setTargetInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleConfirmTarget();
+                  }
+                }}
+                className="w-20 px-2.5 py-1.5 rounded-xl border border-[#D6C8B8] dark:border-stone-700 bg-white dark:bg-stone-800 text-center font-bold text-base text-[#2D2824] dark:text-stone-100 font-mono-numbers focus:border-[#C85A32] focus:outline-none"
+              />
+              <span className="text-xs font-semibold text-stone-500">voltas</span>
+              <button
+                type="button"
+                onClick={() => handleConfirmTarget()}
+                className="px-3 py-1.5 rounded-xl bg-[#8C5E47] hover:bg-[#724A36] text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-xs ml-auto sm:ml-1"
+              >
+                <Check className="w-3.5 h-3.5" />
+                <span>Confirmar</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-[#EAE0D2] dark:border-stone-700/60">
+            <span className="text-[10px] text-stone-500 mr-1">Sugestões:</span>
+            {[12, 18, 24, 30, 36, 42].map((num) => (
+              <button
+                key={num}
+                type="button"
+                onClick={() => handleConfirmTarget(num)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activePart.targetRounds === num
+                    ? 'bg-[#C85A32] text-white shadow-xs'
+                    : 'bg-[#EDE4D6] hover:bg-[#E3D9CA] dark:bg-stone-800 text-stone-700 dark:text-stone-300'
+                }`}
+              >
+                {num}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => handleConfirmTarget(0)}
+              className="text-[11px] text-stone-500 hover:text-stone-800 underline ml-auto cursor-pointer"
+            >
+              Sem meta
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Color Alert Ribbon */}
+      {currentColorReminder ? (
+        <div className="p-3.5 rounded-2xl bg-[#FFF6EE] dark:bg-stone-900 border-2 border-[#F4A261] shadow-md flex items-center justify-between gap-3 animate-pulse">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              className="w-10 h-10 rounded-2xl shadow-sm border border-stone-300 shrink-0 flex items-center justify-center ring-2 ring-amber-300"
+              style={{ backgroundColor: currentColorReminder.colorHex }}
+            >
+              <Sparkles className="w-4 h-4 text-white drop-shadow" />
+            </div>
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#C85A32] flex items-center gap-1">
+                <BellRing className="w-3 h-3" /> Troca de cor nesta volta!
+              </span>
+              <h4 className="text-sm font-extrabold text-[#2D2824] dark:text-stone-100 truncate">
+                Mudar para: {currentColorReminder.colorName}
+              </h4>
+            </div>
+          </div>
+          <button
             onClick={onOpenColorModal}
-            className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shrink-0 cursor-pointer shadow-sm"
+            className="px-2.5 py-1 rounded-xl bg-[#C85A32] hover:bg-[#B24822] text-white font-bold text-xs cursor-pointer shadow-xs"
           >
             Editar
           </button>
         </div>
       ) : nextColorReminder ? (
-        /* Upcoming color reminder pill */
         <div
           onClick={onOpenColorModal}
-          className="p-3 rounded-2xl bg-white dark:bg-stone-800/80 border border-stone-200 dark:border-stone-700 flex items-center justify-between gap-2 text-xs cursor-pointer hover:border-amber-300 transition-all shadow-xs"
+          className="p-2.5 rounded-2xl bg-[#FAF5ED] dark:bg-stone-800/80 border border-[#D6C8B8] dark:border-stone-700 flex items-center justify-between gap-2 text-xs cursor-pointer hover:border-[#C85A32] transition-all shadow-xs"
         >
-          <div className="flex items-center gap-2.5 min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
             <div
-              className="w-5 h-5 rounded-full border border-stone-300 shadow-xs shrink-0"
+              className="w-4 h-4 rounded-full border border-stone-300 shadow-xs shrink-0"
               style={{ backgroundColor: nextColorReminder.colorHex }}
             />
             <span className="text-stone-500 dark:text-stone-400">
-              Próxima troca na <strong className="text-stone-800 dark:text-stone-200">Volta {nextColorReminder.round}</strong>:
+              Próxima troca na <strong>Volta {nextColorReminder.round}</strong>:
             </span>
             <span className="font-bold text-stone-800 dark:text-stone-200 truncate">
               {nextColorReminder.colorName}
             </span>
           </div>
-
-          <span className="text-amber-600 dark:text-amber-400 font-bold flex items-center text-[11px] shrink-0">
+          <span className="text-[#8C5E47] dark:text-amber-400 font-bold flex items-center text-[11px] shrink-0">
             Ver todas <ChevronRight className="w-3.5 h-3.5" />
           </span>
         </div>
-      ) : (
-        /* No color reminder prompt */
-        <div
-          onClick={onOpenColorModal}
-          className="p-2.5 rounded-2xl bg-stone-50 dark:bg-stone-800/50 border border-dashed border-stone-200 dark:border-stone-700 flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 cursor-pointer hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-        >
-          <span className="flex items-center gap-1.5">
-            <Palette className="w-4 h-4 text-pink-500" />
-            Configurar lembretes de troca de cor para esta peça
-          </span>
-          <span className="text-amber-600 dark:text-amber-400 font-bold text-[11px]">+ Adicionar</span>
+      ) : null}
+
+      {/* 4. Main Amigurumi Counter Card */}
+      <div className="stitched-card p-4 sm:p-6 rounded-3xl shadow-md space-y-4 relative overflow-hidden">
+        {/* Top bar inside counter */}
+        <div className="flex items-center justify-between gap-2 border-b border-[#EAE0D2] dark:border-stone-700/60 pb-2.5">
+          <button
+            onClick={handleCompletePart}
+            className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer bg-[#EDE4D6] hover:bg-[#E3D9CA] dark:bg-stone-800 text-[#2D2824] dark:text-stone-200"
+          >
+            {activePart.isCompleted ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-700 dark:text-emerald-400">Concluída! 🎉</span>
+              </>
+            ) : (
+              <>
+                <Circle className="w-3.5 h-3.5 text-stone-400" />
+                <span>Em andamento</span>
+              </>
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowJumpModal(true)}
+            className="px-2 py-1 text-stone-500 hover:text-[#8C5E47] dark:text-stone-400 hover:bg-[#EDE4D6] dark:hover:bg-stone-800 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+          >
+            <Hash className="w-3.5 h-3.5" />
+            <span>Pular volta</span>
+          </button>
         </div>
-      )}
-
-      {/* 3. The Main Amigurumi Round Counter Box */}
-      <div className="p-6 rounded-3xl bg-white dark:bg-stone-800 border-2 border-stone-200/90 dark:border-stone-700 shadow-xl shadow-stone-200/40 dark:shadow-none space-y-5 relative overflow-hidden">
-        {/* Header bar inside counter: Part Name & Completion Toggle */}
-        <div className="flex items-center justify-between gap-2 border-b border-stone-100 dark:border-stone-700 pb-3">
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={handleCompletePart}
-              className="flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-xl transition-all cursor-pointer bg-stone-100 hover:bg-stone-200 dark:bg-stone-700 dark:hover:bg-stone-600 text-stone-700 dark:text-stone-200"
-              title={activePart.isCompleted ? 'Marcar como não concluída' : 'Marcar como pronta'}
-            >
-              {activePart.isCompleted ? (
-                <>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                  <span className="text-emerald-700 dark:text-emerald-300">Peça Concluída!</span>
-                </>
-              ) : (
-                <>
-                  <Circle className="w-4 h-4 text-stone-400" />
-                  <span>Em progresso</span>
-                </>
-              )}
-            </button>
-
-            <div className="flex items-center gap-1.5 bg-stone-50 dark:bg-stone-900/50 px-2 py-0.5 rounded-xl border border-stone-200 dark:border-stone-700">
-              <span className="text-[11px] text-stone-500 dark:text-stone-400 font-semibold">Total:</span>
-              <input
-                type="number"
-                min="0"
-                max="999"
-                placeholder="Ex: 24"
-                value={activePart.targetRounds > 0 ? activePart.targetRounds : ''}
-                onChange={(e) => updateCurrentPart({ targetRounds: Math.max(0, parseInt(e.target.value) || 0) })}
-                className="w-14 px-1 py-0.5 text-center text-xs font-black rounded-lg border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-mono-numbers focus:ring-2 focus:ring-amber-500"
-              />
-              <span className="text-[11px] text-stone-400 font-medium">voltas</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setShowJumpModal(true)}
-              className="p-1.5 text-stone-500 hover:text-amber-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-700 rounded-xl text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer"
-              title="Pular direto para outra volta"
-            >
-              <Hash className="w-3.5 h-3.5" />
-              <span>Ir para...</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Current Round Instruction if available */}
-        {currentRoundInstruction && (
-          <div className="p-3 bg-amber-50 dark:bg-stone-900/60 rounded-2xl border border-amber-200/70 dark:border-stone-700 flex items-center gap-2 text-xs">
-            <span className="font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider text-[10px] bg-amber-200/60 dark:bg-amber-950 px-2 py-0.5 rounded-md">
-              Receita v.{activePart.currentRound}
-            </span>
-            <span className="font-bold text-stone-800 dark:text-stone-200">
-              {currentRoundInstruction}
-            </span>
-          </div>
-        )}
 
         {/* Big Round Counter Display */}
-        <div className="text-center py-2">
-          <span className="text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+        <div className="text-center py-0.5">
+          <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#8C5E47] dark:text-amber-400 font-comfortaa block">
             VOLTA ATUAL
           </span>
-          <div className="flex items-baseline justify-center gap-2 mt-1">
-            <span className="text-7xl sm:text-8xl font-black text-stone-900 dark:text-stone-50 font-mono-numbers tracking-tight">
+          <div className="flex items-baseline justify-center gap-2 mt-0.5">
+            <span className="text-6xl sm:text-7xl font-black text-[#2D2824] dark:text-stone-50 font-mono-numbers tracking-tight">
               {activePart.currentRound}
             </span>
             {activePart.targetRounds > 0 && (
-              <span className="text-xl sm:text-2xl font-bold text-stone-400 dark:text-stone-500 font-mono-numbers">
+              <span className="text-2xl sm:text-3xl font-bold text-stone-400 dark:text-stone-500 font-mono-numbers">
                 / {activePart.targetRounds}
               </span>
             )}
           </div>
 
-          {/* Progress bar of the piece */}
-          <div className="w-full max-w-md mx-auto bg-stone-100 dark:bg-stone-700 h-2 rounded-full overflow-hidden mt-3">
-            <div
-              className="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-300"
-              style={{ width: `${roundProgress}%` }}
-            />
-          </div>
-          <span className="text-[11px] font-semibold text-stone-400 mt-1 block">
-            {roundProgress}% concluído desta peça
+          {/* Progress bar */}
+          {activePart.targetRounds > 0 && (
+            <div className="w-full max-w-sm mx-auto bg-[#E5DCD0] dark:bg-stone-800 h-2 rounded-full overflow-hidden mt-2.5">
+              <div
+                className="h-full bg-gradient-to-r from-[#D97706] to-[#C85A32] transition-all duration-300"
+                style={{ width: `${roundProgress}%` }}
+              />
+            </div>
+          )}
+          <span className="text-[10px] font-medium text-stone-500 mt-1 block">
+            {activePart.targetRounds > 0
+              ? `${roundProgress}% concluído (${activePart.currentRound} de ${activePart.targetRounds} voltas)`
+              : `Volta ${activePart.currentRound}`}
           </span>
         </div>
 
-        {/* Big Touch Buttons for Round (Designed for one-hand phone crocheting) */}
-        <div className="grid grid-cols-3 gap-3 pt-1">
-          {/* -1 Volta button */}
+        {/* Main Touch Buttons: directly under thumb */}
+        <div className="grid grid-cols-3 gap-2.5 pt-0.5">
           <button
             onClick={handleDecrementRound}
             disabled={activePart.currentRound <= 1}
-            className="py-5 px-3 rounded-2xl bg-stone-100 dark:bg-stone-700/80 hover:bg-stone-200 dark:hover:bg-stone-600 disabled:opacity-40 text-stone-800 dark:text-stone-200 font-extrabold text-sm flex flex-col items-center justify-center gap-1 tactile-btn cursor-pointer shadow-xs border border-stone-200/60 dark:border-stone-600"
+            className="py-4 sm:py-5 px-3 rounded-2xl craft-btn-secondary disabled:opacity-40 font-bold text-sm flex flex-col items-center justify-center gap-1 cursor-pointer"
           >
-            <Minus className="w-6 h-6 stroke-[3]" />
-            <span className="text-[11px] font-black uppercase tracking-wider">-1 Volta</span>
+            <Minus className="w-5 h-5 sm:w-6 sm:h-6 stroke-[2.5]" />
+            <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider">-1 Volta</span>
           </button>
 
-          {/* Main +1 Volta Button (Spans 2 columns, huge touch target) */}
           <button
             onClick={handleIncrementRound}
-            className="col-span-2 py-5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-lg flex items-center justify-center gap-3 tactile-btn shadow-lg shadow-amber-500/30 cursor-pointer active:scale-95"
+            className="col-span-2 craft-btn-primary py-4 sm:py-5 px-4 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3 cursor-pointer shadow-md"
           >
-            <Plus className="w-7 h-7 stroke-[3.5]" />
+            <Plus className="w-7 h-7 stroke-[3]" />
             <div className="text-left">
-              <span className="block text-lg leading-tight font-comfortaa">+1 VOLTA</span>
-              <span className="block text-[10px] font-bold text-amber-100 tracking-wider uppercase">
+              <span className="block text-lg sm:text-xl leading-tight font-comfortaa font-bold">+1 VOLTA</span>
+              <span className="block text-[10px] sm:text-[11px] text-white/90 tracking-wider font-medium uppercase">
                 Próxima Volta
               </span>
             </div>
           </button>
         </div>
 
-        {/* 4. Stitch Counter inside the round */}
+        {/* Stitch Counter with Target Stitches Field */}
         {settings.showStitchCounter && (
-          <div className="pt-4 border-t border-stone-100 dark:border-stone-700 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                Pontos nesta volta
+          <div className="pt-3 border-t border-[#EAE0D2] dark:border-stone-700/60 space-y-2">
+            <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+              <span className="font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1.5 font-comfortaa">
+                <span>🪡</span> Pontos na volta {activePart.currentRound}
               </span>
-              <button
-                onClick={handleResetStitches}
-                disabled={activePart.currentStitch === 0}
-                className="text-[11px] font-semibold text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-1 transition-colors cursor-pointer"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Zerar pontos
-              </button>
+
+              <div className="flex items-center gap-2">
+                {/* Field to define total stitches for the round */}
+                <div className="flex items-center gap-1 bg-[#FAF5ED] dark:bg-stone-800 border border-[#D6C8B8] dark:border-stone-700 px-2 py-1 rounded-xl shadow-2xs">
+                  <label htmlFor="project-target-stitches" className="text-[11px] font-bold text-stone-600 dark:text-stone-400">
+                    Total da volta:
+                  </label>
+                  <input
+                    id="project-target-stitches"
+                    type="number"
+                    min="0"
+                    max="999"
+                    placeholder="Sem meta"
+                    value={activePart.targetStitches > 0 ? activePart.targetStitches : ''}
+                    onChange={(e) => {
+                      const val = Math.max(0, parseInt(e.target.value, 10) || 0);
+                      updateCurrentPart({ targetStitches: val });
+                    }}
+                    className="w-12 text-center font-black text-xs text-[#2D2824] dark:text-stone-100 font-mono-numbers bg-transparent focus:outline-none"
+                    title="Quantidade total de pontos que a receita pede nesta volta"
+                  />
+                  <span className="text-[10px] font-semibold text-stone-400">pts</span>
+                </div>
+
+                <button
+                  onClick={handleResetStitches}
+                  disabled={activePart.currentStitch === 0}
+                  className="text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-1 cursor-pointer transition-colors"
+                  title="Zerar pontos contados"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Zerar</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 bg-stone-50 dark:bg-stone-900/60 p-3 rounded-2xl border border-stone-200 dark:border-stone-700">
+            <div className="flex items-center justify-between gap-3 bg-[#F0E8DC] dark:bg-stone-800 p-2.5 rounded-2xl border border-[#D6C8B8] dark:border-stone-700">
               <button
                 onClick={handleDecrementStitch}
                 disabled={activePart.currentStitch <= 0}
-                className="w-12 h-12 rounded-xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 flex items-center justify-center disabled:opacity-30 hover:bg-stone-100 dark:hover:bg-stone-700 tactile-btn cursor-pointer"
+                className="w-11 h-10 rounded-xl bg-white dark:bg-stone-700 border border-[#D6C8B8] dark:border-stone-600 text-stone-700 dark:text-stone-200 flex items-center justify-center disabled:opacity-30 hover:bg-[#F8F4EC] dark:hover:bg-stone-600 transition-transform active:scale-95 cursor-pointer shadow-xs"
+                title="Diminuir 1 ponto"
               >
                 <Minus className="w-5 h-5 stroke-[2.5]" />
               </button>
 
               <div className="text-center">
-                <span className="text-3xl font-black text-stone-800 dark:text-stone-100 font-mono-numbers">
-                  {activePart.currentStitch}
-                </span>
-                {activePart.targetStitches > 0 && (
-                  <span className="text-sm font-semibold text-stone-400 dark:text-stone-500 font-mono-numbers">
-                    {' '}/ {activePart.targetStitches} pts
+                <div className="flex items-baseline justify-center gap-1 font-mono-numbers">
+                  <span className="text-2xl sm:text-3xl font-black text-[#2D2824] dark:text-stone-100">
+                    {activePart.currentStitch}
                   </span>
-                )}
-                <span className="block text-[10px] text-stone-400 font-medium">pontos feitos</span>
+                  {activePart.targetStitches > 0 && (
+                    <span className="text-base sm:text-lg font-bold text-stone-400 dark:text-stone-500">
+                      / {activePart.targetStitches}
+                    </span>
+                  )}
+                </div>
+                <span className="block text-[10px] font-semibold">
+                  {activePart.targetStitches > 0 ? (
+                    activePart.currentStitch >= activePart.targetStitches ? (
+                      <span className="text-emerald-700 dark:text-emerald-400 font-bold">✓ Volta completa!</span>
+                    ) : (
+                      <span className="text-stone-500 dark:text-stone-400 font-medium">
+                        falta(m) {activePart.targetStitches - activePart.currentStitch} pts
+                      </span>
+                    )
+                  ) : (
+                    <span className="text-stone-500 dark:text-stone-400 font-medium">pontos feitos</span>
+                  )}
+                </span>
               </div>
 
               <button
                 onClick={handleIncrementStitch}
-                className="w-16 h-12 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold flex items-center justify-center tactile-btn shadow-md shadow-amber-500/20 cursor-pointer"
+                disabled={activePart.targetStitches > 0 && activePart.currentStitch >= activePart.targetStitches && !settings.autoAdvanceRound}
+                className={`w-14 h-10 rounded-xl font-bold flex items-center justify-center shadow-xs transition-transform active:scale-95 cursor-pointer ${
+                  activePart.targetStitches > 0 && activePart.currentStitch >= activePart.targetStitches && !settings.autoAdvanceRound
+                    ? 'bg-stone-300 dark:bg-stone-700 text-stone-400 dark:text-stone-500 cursor-not-allowed opacity-50'
+                    : 'bg-[#8C5E47] hover:bg-[#724A36] text-white'
+                }`}
+                title={
+                  activePart.targetStitches > 0 && activePart.currentStitch >= activePart.targetStitches
+                    ? 'Volta completa! Avance para a próxima volta (+1 Volta)'
+                    : 'Aumentar 1 ponto'
+                }
               >
-                <Plus className="w-6 h-6 stroke-[3]" />
+                <Plus className="w-5 h-5 stroke-[3]" />
               </button>
+            </div>
+
+            {/* Quick stitch preset chips */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-1 text-[11px]">
+              <span className="text-[10px] text-stone-500 font-medium mr-0.5">Pontos comuns:</span>
+              {[6, 12, 18, 24, 30, 36, 42].map((num) => (
+                <button
+                  key={num}
+                  type="button"
+                  onClick={() => updateCurrentPart({ targetStitches: num })}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    activePart.targetStitches === num
+                      ? 'bg-[#8C5E47] text-white shadow-xs'
+                      : 'bg-[#EDE4D6] hover:bg-[#E2D6C5] dark:bg-stone-700 text-stone-700 dark:text-stone-300'
+                  }`}
+                  title={`Definir meta de ${num} pontos nesta volta`}
+                >
+                  {num}
+                </button>
+              ))}
+              {activePart.targetStitches > 0 && (
+                <button
+                  type="button"
+                  onClick={() => updateCurrentPart({ targetStitches: 0 })}
+                  className="text-[10px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 underline ml-auto cursor-pointer"
+                >
+                  Limpar
+                </button>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* 5. Quick Tools Bar */}
-      <div className="grid grid-cols-3 gap-2 px-1 text-xs">
+      {/* 5. Clean Quick Tools Bar */}
+      <div className="grid grid-cols-3 gap-2 text-xs">
         <button
           onClick={onOpenColorModal}
-          className="py-3 px-2 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:border-pink-300 text-stone-700 dark:text-stone-300 font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
+          className="py-2.5 px-2 rounded-2xl bg-[#FAF5ED] dark:bg-stone-800 border border-[#D6C8B8] dark:border-stone-700 hover:border-pink-300 text-stone-700 dark:text-stone-300 font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
         >
           <Palette className="w-4 h-4 text-pink-500 shrink-0" />
-          <span className="truncate">Cores</span>
-          {activePart.colorReminders.length > 0 && (
+          <span className="truncate">Trocas de Cor</span>
+          {activePart.colorReminders?.length > 0 && (
             <span className="w-4 h-4 rounded-full bg-pink-100 dark:bg-pink-900/60 text-pink-700 dark:text-pink-300 text-[9px] flex items-center justify-center shrink-0">
               {activePart.colorReminders.length}
             </span>
@@ -525,20 +688,17 @@ export const CounterView: React.FC<CounterViewProps> = ({
 
         <button
           onClick={onOpenPartsModal}
-          className="py-3 px-2 rounded-2xl bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700 hover:border-amber-300 text-stone-700 dark:text-stone-300 font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
+          className="py-2.5 px-2 rounded-2xl bg-[#FAF5ED] dark:bg-stone-800 border border-[#D6C8B8] dark:border-stone-700 hover:border-amber-400 text-stone-700 dark:text-stone-300 font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
         >
-          <Layers className="w-4 h-4 text-amber-500 shrink-0" />
-          <span className="truncate">Peças</span>
-          <span className="w-4 h-4 rounded-full bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 text-[9px] flex items-center justify-center shrink-0">
-            {project.parts.length}
-          </span>
+          <Layers className="w-4 h-4 text-[#8C5E47] shrink-0" />
+          <span className="truncate">Peças ({project.parts.length})</span>
         </button>
 
         <button
           onClick={onOpenPdfModal}
-          className="py-3 px-2 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 hover:bg-amber-100 text-amber-900 dark:text-amber-200 font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
+          className="py-2.5 px-2 rounded-2xl bg-[#FAF5ED] dark:bg-stone-800 border border-[#D6C8B8] dark:border-stone-700 hover:bg-[#EFE8DC] text-[#6F442F] dark:text-amber-200 font-bold flex flex-col sm:flex-row items-center justify-center gap-1.5 shadow-xs cursor-pointer transition-all"
         >
-          <FileText className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <FileText className="w-4 h-4 text-[#8C5E47] dark:text-amber-400 shrink-0" />
           <span className="truncate">Receita PDF</span>
         </button>
       </div>
@@ -546,8 +706,8 @@ export const CounterView: React.FC<CounterViewProps> = ({
       {/* Jump to Round Modal */}
       {showJumpModal && (
         <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
-          <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl max-w-xs w-full p-5 shadow-2xl">
-            <h4 className="font-extrabold text-base text-stone-900 dark:text-stone-100 mb-2 font-comfortaa">
+          <div className="bg-[#FAF5ED] dark:bg-stone-900 border border-[#D6C8B8] dark:border-stone-800 rounded-3xl max-w-xs w-full p-5 shadow-2xl">
+            <h4 className="font-extrabold text-base text-[#2D2824] dark:text-stone-100 mb-2 font-comfortaa">
               Ir para Volta Específica
             </h4>
             <p className="text-xs text-stone-500 dark:text-stone-400 mb-4">
@@ -557,24 +717,24 @@ export const CounterView: React.FC<CounterViewProps> = ({
               <input
                 type="number"
                 min="1"
-                max="500"
+                max="999"
                 placeholder="Ex: 18"
                 value={jumpRoundInput}
                 onChange={(e) => setJumpRoundInput(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 font-mono-numbers text-center text-xl font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                className="w-full px-3 py-2.5 rounded-xl border border-[#D6C8B8] dark:border-stone-700 bg-white dark:bg-stone-900 text-[#2D2824] dark:text-stone-100 font-mono-numbers text-center text-xl font-bold focus:ring-2 focus:ring-[#8C5E47] focus:outline-none"
                 autoFocus
               />
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowJumpModal(false)}
-                  className="flex-1 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300 text-xs font-bold"
+                  className="flex-1 py-2 rounded-xl border border-stone-300 dark:border-stone-700 text-stone-700 dark:text-stone-300 text-xs font-bold cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md shadow-amber-500/20"
+                  className="flex-1 py-2 rounded-xl craft-btn-primary text-white text-xs font-bold shadow-md cursor-pointer"
                 >
                   Pular
                 </button>

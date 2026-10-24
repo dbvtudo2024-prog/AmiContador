@@ -288,9 +288,10 @@ export const StorageService = {
     return DEFAULT_QUICK_COUNTER;
   },
 
-  convertQuickCounterToProject(title: string, counter: QuickCounter): AmigurumiProject {
+  convertQuickCounterToProject(title: string, counter: QuickCounter, partName?: string): AmigurumiProject {
     const projectId = 'proj_' + Math.random().toString(36).substring(2, 9);
     const partId = 'part_' + Math.random().toString(36).substring(2, 8);
+    const resolvedPartName = (partName && partName.trim()) || 'Peça Principal';
 
     const newProject: AmigurumiProject = {
       id: projectId,
@@ -307,7 +308,7 @@ export const StorageService = {
       parts: [
         {
           id: partId,
-          name: 'Peça Principal',
+          name: resolvedPartName,
           targetRounds: counter.targetRounds || Math.max(counter.currentRound, 20),
           currentRound: counter.currentRound,
           currentStitch: counter.currentStitch,
@@ -321,6 +322,36 @@ export const StorageService = {
     };
 
     return this.saveProject(newProject);
+  },
+
+  addPartToExistingProject(projectId: string, partName: string, counter: QuickCounter): AmigurumiProject | null {
+    const project = this.getAllProjects().find((p) => p.id === projectId);
+    if (!project) return null;
+
+    const partId = 'part_' + Math.random().toString(36).substring(2, 8);
+    const resolvedPartName = (partName && partName.trim()) || `Peça ${project.parts.length + 1}`;
+
+    const newPart: ProjectPart = {
+      id: partId,
+      name: resolvedPartName,
+      targetRounds: counter.targetRounds || Math.max(counter.currentRound, 20),
+      currentRound: counter.currentRound,
+      currentStitch: counter.currentStitch,
+      targetStitches: counter.targetStitches || 6,
+      isCompleted: false,
+      order: project.parts.length + 1,
+      colorReminders: counter.colorReminders || [],
+      notes: counter.notes,
+    };
+
+    const updated: AmigurumiProject = {
+      ...project,
+      activePartId: partId,
+      parts: [...project.parts, newPart],
+      updatedAt: new Date().toISOString(),
+    };
+
+    return this.saveProject(updated);
   },
 
   getActiveProjectId(): string | null {

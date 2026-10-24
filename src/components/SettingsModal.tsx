@@ -244,16 +244,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
         </div>
-
-        {/* Footer */}
-        <div className="p-4 border-t border-stone-200 dark:border-stone-800 flex justify-end bg-stone-50/50 dark:bg-stone-800/30">
-          <button
-            onClick={onClose}
-            className="px-5 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900 font-bold text-sm cursor-pointer"
-          >
-            Salvar & Fechar
-          </button>
-        </div>
       </div>
     </div>
   );

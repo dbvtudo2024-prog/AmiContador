@@ -18,6 +18,7 @@ import {
   Eye,
   RefreshCw,
 } from 'lucide-react';
+import { PdfCanvasViewer } from './PdfCanvasViewer';
 
 interface PdfViewerModalProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   isSplitMode,
   onToggleSplitMode,
 }) => {
-  const [pdfData, setPdfData] = useState<{ fileName: string; url: string } | null>(null);
+  const [pdfData, setPdfData] = useState<{ fileName: string; blob: Blob; url: string } | null>(null);
   const [activeTab, setActiveTab] = useState<'view' | 'extract' | 'paste'>('view');
   const [loading, setLoading] = useState<boolean>(false);
   const [parsing, setParsing] = useState<boolean>(false);
@@ -54,7 +55,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
       const res = await PdfStorageService.getPdf(project.id);
       setLoading(false);
       if (res) {
-        setPdfData({ fileName: res.fileName, url: res.url });
+        setPdfData({ fileName: res.fileName, blob: res.blob, url: res.url });
         currentUrl = res.url;
       } else {
         setPdfData(null);
@@ -89,7 +90,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
       await PdfStorageService.savePdf(project.id, file);
       const res = await PdfStorageService.getPdf(project.id);
       if (res) {
-        setPdfData({ fileName: res.fileName, url: res.url });
+        setPdfData({ fileName: res.fileName, blob: res.blob, url: res.url });
         setSuccessMessage(`PDF "${file.name}" anexado com sucesso ao projeto!`);
         setTimeout(() => setSuccessMessage(null), 3000);
       }
@@ -192,10 +193,10 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
         {/* Content */}
         <div className="flex-1 overflow-hidden relative">
           {pdfData ? (
-            <iframe
-              src={pdfData.url}
-              title="Visualizador de PDF da Receita"
-              className="w-full h-full border-none"
+            <PdfCanvasViewer
+              blob={pdfData.blob}
+              fileName={pdfData.fileName}
+              isCompact={true}
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center p-6 text-center text-stone-400">
@@ -362,10 +363,10 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
                     <RefreshCw className="w-6 h-6 animate-spin mr-2" /> Carregando PDF...
                   </div>
                 ) : pdfData ? (
-                  <iframe
-                    src={pdfData.url}
-                    title="PDF da Receita"
-                    className="w-full h-full border-none"
+                  <PdfCanvasViewer
+                    blob={pdfData.blob}
+                    fileName={pdfData.fileName}
+                    isCompact={false}
                   />
                 ) : (
                   <div className="h-full flex flex-col items-center justify-center p-8 text-center text-stone-400">
