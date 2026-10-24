@@ -1,9 +1,19 @@
-import { AmigurumiProject, AppSettings, ProjectPart, SupabaseConfig } from '../types/amigurumi';
+import { AmigurumiProject, AppSettings, ProjectPart, SupabaseConfig, QuickCounter } from '../types/amigurumi';
 
 const PROJECTS_STORAGE_KEY = 'amicontador_projects_v1';
 const ACTIVE_PROJECT_ID_KEY = 'amicontador_active_project_id';
 const SETTINGS_STORAGE_KEY = 'amicontador_settings_v1';
 const SUPABASE_CONFIG_KEY = 'amicontador_supabase_config_v1';
+const QUICK_COUNTER_STORAGE_KEY = 'amicontador_quick_counter_v1';
+
+export const DEFAULT_QUICK_COUNTER: QuickCounter = {
+  currentRound: 1,
+  targetRounds: 0,
+  currentStitch: 0,
+  targetStitches: 0,
+  colorReminders: [],
+  notes: '',
+};
 
 export const DEFAULT_SETTINGS: AppSettings = {
   soundEnabled: true,
@@ -230,24 +240,87 @@ export const SEED_PROJECTS: AmigurumiProject[] = [
 ];
 
 export const StorageService = {
-  // Projects
+  // Projects - Starts clean/empty (zerado)
   getAllProjects(): AmigurumiProject[] {
     if (typeof window === 'undefined') return [];
     try {
       const stored = localStorage.getItem(PROJECTS_STORAGE_KEY);
       if (!stored) {
-        // Seed default projects on first run
-        localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(SEED_PROJECTS));
-        return SEED_PROJECTS;
+        return [];
       }
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        // Remove legacy seed projects if they exist so app stays zerado
+        const cleaned = parsed.filter(
+          (p) => p.id !== 'proj_ursinho_caramelo' && p.id !== 'proj_polvo_neonatal'
+        );
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(PROJECTS_STORAGE_KEY, JSON.stringify(cleaned));
+        }
+        return cleaned;
       }
-      return SEED_PROJECTS;
+      return [];
     } catch {
-      return SEED_PROJECTS;
+      return [];
     }
+  },
+
+  // Quick / Free Counter (Works anytime, with or without projects)
+  getQuickCounter(): QuickCounter {
+    if (typeof window === 'undefined') return DEFAULT_QUICK_COUNTER;
+    try {
+      const stored = localStorage.getItem(QUICK_COUNTER_STORAGE_KEY);
+      return stored ? { ...DEFAULT_QUICK_COUNTER, ...JSON.parse(stored) } : DEFAULT_QUICK_COUNTER;
+    } catch {
+      return DEFAULT_QUICK_COUNTER;
+    }
+  },
+
+  saveQuickCounter(counter: QuickCounter): QuickCounter {
+    if (typeof window === 'undefined') return counter;
+    localStorage.setItem(QUICK_COUNTER_STORAGE_KEY, JSON.stringify(counter));
+    return counter;
+  },
+
+  resetQuickCounter(): QuickCounter {
+    if (typeof window === 'undefined') return DEFAULT_QUICK_COUNTER;
+    localStorage.setItem(QUICK_COUNTER_STORAGE_KEY, JSON.stringify(DEFAULT_QUICK_COUNTER));
+    return DEFAULT_QUICK_COUNTER;
+  },
+
+  convertQuickCounterToProject(title: string, counter: QuickCounter): AmigurumiProject {
+    const projectId = 'proj_' + Math.random().toString(36).substring(2, 9);
+    const partId = 'part_' + Math.random().toString(36).substring(2, 8);
+
+    const newProject: AmigurumiProject = {
+      id: projectId,
+      title: title.trim() || 'Meu Amigurumi',
+      patternName: '',
+      hookSize: '2.5mm',
+      yarnBrand: '',
+      category: 'Geral',
+      notes: counter.notes || '',
+      status: 'active',
+      activePartId: partId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      parts: [
+        {
+          id: partId,
+          name: 'Peça Principal',
+          targetRounds: counter.targetRounds || Math.max(counter.currentRound, 20),
+          currentRound: counter.currentRound,
+          currentStitch: counter.currentStitch,
+          targetStitches: counter.targetStitches || 6,
+          isCompleted: false,
+          order: 1,
+          colorReminders: counter.colorReminders || [],
+          notes: counter.notes,
+        },
+      ],
+    };
+
+    return this.saveProject(newProject);
   },
 
   getActiveProjectId(): string | null {

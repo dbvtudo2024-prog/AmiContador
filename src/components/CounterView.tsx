@@ -364,9 +364,19 @@ export const CounterView: React.FC<CounterViewProps> = ({
               )}
             </button>
 
-            <span className="text-xs text-stone-400 font-medium">
-              Meta: {activePart.targetRounds} voltas
-            </span>
+            <div className="flex items-center gap-1.5 bg-stone-50 dark:bg-stone-900/50 px-2 py-0.5 rounded-xl border border-stone-200 dark:border-stone-700">
+              <span className="text-[11px] text-stone-500 dark:text-stone-400 font-semibold">Total:</span>
+              <input
+                type="number"
+                min="0"
+                max="999"
+                placeholder="Ex: 24"
+                value={activePart.targetRounds > 0 ? activePart.targetRounds : ''}
+                onChange={(e) => updateCurrentPart({ targetRounds: Math.max(0, parseInt(e.target.value) || 0) })}
+                className="w-14 px-1 py-0.5 text-center text-xs font-black rounded-lg border border-stone-300 dark:border-stone-600 bg-white dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-mono-numbers focus:ring-2 focus:ring-amber-500"
+              />
+              <span className="text-[11px] text-stone-400 font-medium">voltas</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-1">

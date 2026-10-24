@@ -35,6 +35,15 @@ export interface AmigurumiProject {
   updatedAt: string;
 }
 
+export interface QuickCounter {
+  currentRound: number;
+  targetRounds: number;
+  currentStitch: number;
+  targetStitches: number;
+  colorReminders: ColorReminder[];
+  notes?: string;
+}
+
 export interface AppSettings {
   soundEnabled: boolean;
   soundVolume: number;

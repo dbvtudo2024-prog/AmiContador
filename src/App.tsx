@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AmigurumiProject, AppSettings, ColorReminder } from './types/amigurumi';
+import { AmigurumiProject, AppSettings, ColorReminder, QuickCounter } from './types/amigurumi';
 import { StorageService, DEFAULT_SETTINGS } from './services/storage';
 import { CounterView } from './components/CounterView';
+import { FreeCounterView } from './components/FreeCounterView';
 import { ProjectListModal } from './components/ProjectListModal';
 import { PartManagerModal } from './components/PartManagerModal';
 import { ColorRemindersModal } from './components/ColorRemindersModal';
@@ -24,11 +25,13 @@ import {
   Check,
   FileText,
   Split,
+  Sparkles,
 } from 'lucide-react';
 
 export default function App() {
   const [projects, setProjects] = useState<AmigurumiProject[]>([]);
-  const [activeProjectId, setActiveProjectId] = useState<string>('');
+  const [activeProjectId, setActiveProjectId] = useState<string>('free');
+  const [quickCounter, setQuickCounter] = useState<QuickCounter>(StorageService.getQuickCounter());
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   // Modals
@@ -64,8 +67,11 @@ export default function App() {
   useEffect(() => {
     const loadedProjects = StorageService.getAllProjects();
     const loadedSettings = StorageService.getSettings();
+    const loadedQuick = StorageService.getQuickCounter();
+
     setProjects(loadedProjects);
     setSettings(loadedSettings);
+    setQuickCounter(loadedQuick);
 
     // Check if URL has incoming shared project from QR Code or link (#project=...)
     if (typeof window !== 'undefined' && window.location.hash.startsWith('#project=')) {
@@ -78,7 +84,6 @@ export default function App() {
         const updated = StorageService.getAllProjects();
         setProjects(updated);
         showToast(`Projeto "${saved.title}" sincronizado com sucesso!`);
-        // Clean hash without reload
         history.replaceState(null, '', window.location.pathname);
         return;
       }
@@ -87,9 +92,9 @@ export default function App() {
     const savedActiveId = StorageService.getActiveProjectId();
     if (savedActiveId && loadedProjects.some((p) => p.id === savedActiveId)) {
       setActiveProjectId(savedActiveId);
-    } else if (loadedProjects.length > 0) {
-      setActiveProjectId(loadedProjects[0].id);
-      StorageService.setActiveProjectId(loadedProjects[0].id);
+    } else {
+      // Default to free counter so app starts completely zerado
+      setActiveProjectId('free');
     }
   }, []);
 
@@ -120,8 +125,35 @@ export default function App() {
     };
   }, [settings.keepAwake]);
 
-  // Current active project
-  const currentProject = projects.find((p) => p.id === activeProjectId) || projects[0] || null;
+  // Current active project (or null if in Free Counter mode)
+  const isFreeMode = activeProjectId === 'free' || !projects.some((p) => p.id === activeProjectId);
+  const currentProject = isFreeMode ? null : projects.find((p) => p.id === activeProjectId) || null;
+
+  // Active part if in project mode
+  const currentProjectActivePart = currentProject
+    ? currentProject.parts.find((p) => p.id === currentProject.activePartId) || currentProject.parts[0]
+    : null;
+
+  // Free counter update handler
+  const handleUpdateQuickCounter = (updated: QuickCounter) => {
+    setQuickCounter(updated);
+    StorageService.saveQuickCounter(updated);
+  };
+
+  const handleResetQuickCounter = () => {
+    const fresh = StorageService.resetQuickCounter();
+    setQuickCounter(fresh);
+    showToast('Contador zerado (Volta 1, Ponto 0)!');
+  };
+
+  const handleSaveFreeCounterAsProject = (title: string) => {
+    const newProject = StorageService.convertQuickCounterToProject(title, quickCounter);
+    const updated = StorageService.getAllProjects();
+    setProjects(updated);
+    setActiveProjectId(newProject.id);
+    StorageService.setActiveProjectId(newProject.id);
+    showToast(`Projeto "${newProject.title}" criado e salvo no banco!`);
+  };
 
   // Save changes to current project
   const handleUpdateProject = (updated: AmigurumiProject) => {
@@ -129,18 +161,23 @@ export default function App() {
     setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
   };
 
-  // Switch project
+  // Switch project or switch to free counter
   const handleSelectProject = (id: string) => {
     setActiveProjectId(id);
     StorageService.setActiveProjectId(id);
+  };
+
+  const handleSelectFreeCounter = () => {
+    setActiveProjectId('free');
+    StorageService.setActiveProjectId('free');
   };
 
   // Reload projects from storage
   const handleRefreshProjects = () => {
     const refreshed = StorageService.getAllProjects();
     setProjects(refreshed);
-    if (!refreshed.some((p) => p.id === activeProjectId) && refreshed.length > 0) {
-      setActiveProjectId(refreshed[0].id);
+    if (!refreshed.some((p) => p.id === activeProjectId)) {
+      setActiveProjectId('free');
     }
   };
 
@@ -157,6 +194,59 @@ export default function App() {
       reminder,
       partName,
     });
+  };
+
+  // Color reminders update handler (works for either project or free counter)
+  const handleUpdateColorReminders = (updatedReminders: ColorReminder[]) => {
+    if (currentProject && currentProjectActivePart) {
+      const updatedParts = currentProject.parts.map((p) =>
+        p.id === currentProjectActivePart.id ? { ...p, colorReminders: updatedReminders } : p
+      );
+      handleUpdateProject({ ...currentProject, parts: updatedParts });
+    } else {
+      handleUpdateQuickCounter({ ...quickCounter, colorReminders: updatedReminders });
+    }
+  };
+
+  // Active color reminders for the modal
+  const modalColorReminders = currentProjectActivePart
+    ? currentProjectActivePart.colorReminders
+    : quickCounter.colorReminders;
+
+  const modalCurrentRound = currentProjectActivePart
+    ? currentProjectActivePart.currentRound
+    : quickCounter.currentRound;
+
+  const modalPartName = currentProjectActivePart
+    ? `${currentProject?.title} • ${currentProjectActivePart.name}`
+    : 'Contador Livre';
+
+  // Dummy project fallback for PDF viewer when in free counter mode
+  const pdfProjectFallback: AmigurumiProject = currentProject || {
+    id: 'free_counter_pdf',
+    title: 'Receita Livre',
+    patternName: '',
+    hookSize: '2.5mm',
+    yarnBrand: '',
+    category: 'Geral',
+    notes: '',
+    status: 'active',
+    activePartId: 'part_free',
+    parts: [
+      {
+        id: 'part_free',
+        name: 'Peça Principal',
+        targetRounds: quickCounter.targetRounds || 20,
+        currentRound: quickCounter.currentRound,
+        currentStitch: quickCounter.currentStitch,
+        targetStitches: 6,
+        isCompleted: false,
+        order: 1,
+        colorReminders: quickCounter.colorReminders,
+      },
+    ],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
   // Theme wrapper classes
@@ -187,14 +277,18 @@ export default function App() {
             </div>
           </div>
 
-          {/* Project Switcher Pill */}
+          {/* Project / Counter Switcher Pill */}
           <button
             onClick={() => setIsProjectsOpen(true)}
-            className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-2xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold transition-all cursor-pointer max-w-[140px] sm:max-w-xs truncate shadow-xs"
-            title="Abrir banco de projetos"
+            className="flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-2xl bg-stone-100 hover:bg-stone-200 dark:bg-stone-800 dark:hover:bg-stone-700 border border-stone-200 dark:border-stone-700 text-stone-800 dark:text-stone-200 text-xs font-bold transition-all cursor-pointer max-w-[170px] sm:max-w-xs truncate shadow-xs"
+            title="Abrir banco de projetos ou alternar para Contador Livre"
           >
-            <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-            <span className="truncate">{currentProject ? currentProject.title : 'Selecionar Projeto'}</span>
+            {isFreeMode ? (
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            ) : (
+              <FolderOpen className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            )}
+            <span className="truncate">{currentProject ? currentProject.title : 'Contador Livre'}</span>
             <span className="text-[10px] text-stone-400 shrink-0">▼</span>
           </button>
 
@@ -210,20 +304,18 @@ export default function App() {
               <span className="hidden sm:inline">Receita PDF</span>
             </button>
 
-            {/* Split screen toggle on PC when PDF modal isn't full screen */}
-            {currentProject && (
-              <button
-                onClick={() => setIsSplitMode(!isSplitMode)}
-                className={`hidden md:flex p-2 rounded-2xl border transition-colors ${
-                  isSplitMode
-                    ? 'bg-amber-500 text-white border-amber-600'
-                    : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border-stone-200 dark:border-stone-700'
-                }`}
-                title={isSplitMode ? 'Desativar tela dividida' : 'Modo Dividido: PDF à esquerda e Contador à direita'}
-              >
-                <Split className="w-4 h-4" />
-              </button>
-            )}
+            {/* Split screen toggle on PC */}
+            <button
+              onClick={() => setIsSplitMode(!isSplitMode)}
+              className={`hidden md:flex p-2 rounded-2xl border transition-colors ${
+                isSplitMode
+                  ? 'bg-amber-500 text-white border-amber-600'
+                  : 'text-stone-600 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700'
+              }`}
+              title={isSplitMode ? 'Desativar tela dividida' : 'Modo Dividido: PDF à esquerda e Contador à direita'}
+            >
+              <Split className="w-4 h-4" />
+            </button>
 
             {/* Sync QR / Share button */}
             <button
@@ -275,7 +367,7 @@ export default function App() {
           </div>
         )}
 
-        {isSplitMode && currentProject ? (
+        {isSplitMode ? (
           /* Split Screen: PDF on left, Counter on right */
           <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-65px)] overflow-hidden">
             <div className="w-full md:w-1/2 h-1/2 md:h-full">
@@ -284,20 +376,37 @@ export default function App() {
                 isSplitMode={true}
                 onClose={() => setIsSplitMode(false)}
                 onToggleSplitMode={() => setIsSplitMode(false)}
-                project={currentProject}
-                onUpdateProject={handleUpdateProject}
+                project={pdfProjectFallback}
+                onUpdateProject={(up) => {
+                  if (currentProject) {
+                    handleUpdateProject(up);
+                  }
+                }}
               />
             </div>
             <div className="w-full md:w-1/2 h-1/2 md:h-full overflow-y-auto p-4 sm:p-6 bg-yarn-pattern dark:bg-stone-950">
-              <CounterView
-                project={currentProject}
-                settings={settings}
-                onUpdateProject={handleUpdateProject}
-                onOpenColorModal={() => setIsColorsOpen(true)}
-                onOpenPartsModal={() => setIsPartsOpen(true)}
-                onOpenPdfModal={() => setIsPdfOpen(true)}
-                onTriggerColorAlert={handleTriggerColorAlert}
-              />
+              {currentProject ? (
+                <CounterView
+                  project={currentProject}
+                  settings={settings}
+                  onUpdateProject={handleUpdateProject}
+                  onOpenColorModal={() => setIsColorsOpen(true)}
+                  onOpenPartsModal={() => setIsPartsOpen(true)}
+                  onOpenPdfModal={() => setIsPdfOpen(true)}
+                  onTriggerColorAlert={handleTriggerColorAlert}
+                />
+              ) : (
+                <FreeCounterView
+                  counter={quickCounter}
+                  settings={settings}
+                  onUpdateCounter={handleUpdateQuickCounter}
+                  onResetCounter={handleResetQuickCounter}
+                  onSaveAsProject={handleSaveFreeCounterAsProject}
+                  onOpenColorModal={() => setIsColorsOpen(true)}
+                  onOpenPdfModal={() => setIsPdfOpen(true)}
+                  onTriggerColorAlert={handleTriggerColorAlert}
+                />
+              )}
             </div>
           </div>
         ) : (
@@ -314,15 +423,16 @@ export default function App() {
                 onTriggerColorAlert={handleTriggerColorAlert}
               />
             ) : (
-              <div className="text-center py-20">
-                <p className="text-stone-500 font-semibold mb-4">Nenhum projeto encontrado.</p>
-                <button
-                  onClick={() => setIsProjectsOpen(true)}
-                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm"
-                >
-                  Criar ou Importar Amigurumi
-                </button>
-              </div>
+              <FreeCounterView
+                counter={quickCounter}
+                settings={settings}
+                onUpdateCounter={handleUpdateQuickCounter}
+                onResetCounter={handleResetQuickCounter}
+                onSaveAsProject={handleSaveFreeCounterAsProject}
+                onOpenColorModal={() => setIsColorsOpen(true)}
+                onOpenPdfModal={() => setIsPdfOpen(true)}
+                onTriggerColorAlert={handleTriggerColorAlert}
+              />
             )}
           </div>
         )}
@@ -337,57 +447,53 @@ export default function App() {
       )}
 
       {/* Modals */}
+      <PdfViewerModal
+        isOpen={isPdfOpen}
+        isSplitMode={false}
+        onClose={() => setIsPdfOpen(false)}
+        onToggleSplitMode={() => {
+          setIsSplitMode(true);
+          setIsPdfOpen(false);
+        }}
+        project={pdfProjectFallback}
+        onUpdateProject={(up) => {
+          if (currentProject) {
+            handleUpdateProject(up);
+          }
+        }}
+      />
+
       {currentProject && (
-        <>
-          <PdfViewerModal
-            isOpen={isPdfOpen}
-            isSplitMode={false}
-            onClose={() => setIsPdfOpen(false)}
-            onToggleSplitMode={() => {
-              setIsSplitMode(true);
-              setIsPdfOpen(false);
-            }}
-            project={currentProject}
-            onUpdateProject={handleUpdateProject}
-          />
-
-          <PartManagerModal
-            isOpen={isPartsOpen}
-            onClose={() => setIsPartsOpen(false)}
-            project={currentProject}
-            onUpdateProject={handleUpdateProject}
-          />
-
-          <ColorRemindersModal
-            isOpen={isColorsOpen}
-            onClose={() => setIsColorsOpen(false)}
-            part={
-              currentProject.parts.find((p) => p.id === currentProject.activePartId) ||
-              currentProject.parts[0]
-            }
-            onUpdatePart={(updatedPart) => {
-              const updatedParts = currentProject.parts.map((p) =>
-                p.id === updatedPart.id ? updatedPart : p
-              );
-              handleUpdateProject({ ...currentProject, parts: updatedParts });
-            }}
-          />
-
-          <SyncShareModal
-            isOpen={isSyncOpen}
-            onClose={() => setIsSyncOpen(false)}
-            project={currentProject}
-            onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
-          />
-
-          <SupabaseModal
-            isOpen={isSupabaseOpen}
-            onClose={() => setIsSupabaseOpen(false)}
-            currentProject={currentProject}
-            onRefreshProjects={handleRefreshProjects}
-          />
-        </>
+        <PartManagerModal
+          isOpen={isPartsOpen}
+          onClose={() => setIsPartsOpen(false)}
+          project={currentProject}
+          onUpdateProject={handleUpdateProject}
+        />
       )}
+
+      <ColorRemindersModal
+        isOpen={isColorsOpen}
+        onClose={() => setIsColorsOpen(false)}
+        partName={modalPartName}
+        currentRound={modalCurrentRound}
+        colorReminders={modalColorReminders}
+        onUpdateReminders={handleUpdateColorReminders}
+      />
+
+      <SyncShareModal
+        isOpen={isSyncOpen}
+        onClose={() => setIsSyncOpen(false)}
+        project={pdfProjectFallback}
+        onOpenSupabaseModal={() => setIsSupabaseOpen(true)}
+      />
+
+      <SupabaseModal
+        isOpen={isSupabaseOpen}
+        onClose={() => setIsSupabaseOpen(false)}
+        currentProject={pdfProjectFallback}
+        onRefreshProjects={handleRefreshProjects}
+      />
 
       <ProjectListModal
         isOpen={isProjectsOpen}
@@ -395,6 +501,7 @@ export default function App() {
         projects={projects}
         activeProjectId={activeProjectId}
         onSelectProject={handleSelectProject}
+        onSelectFreeCounter={handleSelectFreeCounter}
         onRefreshProjects={handleRefreshProjects}
       />
 

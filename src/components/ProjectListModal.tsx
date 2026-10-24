@@ -22,6 +22,7 @@ interface ProjectListModalProps {
   projects: AmigurumiProject[];
   activeProjectId: string;
   onSelectProject: (id: string) => void;
+  onSelectFreeCounter: () => void;
   onRefreshProjects: () => void;
 }
 
@@ -31,6 +32,7 @@ export const ProjectListModal: React.FC<ProjectListModalProps> = ({
   projects,
   activeProjectId,
   onSelectProject,
+  onSelectFreeCounter,
   onRefreshProjects,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -165,6 +167,18 @@ export const ProjectListModal: React.FC<ProjectListModalProps> = ({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={() => {
+                onSelectFreeCounter();
+                onClose();
+              }}
+              className="px-3 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 hover:bg-amber-100 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200 font-bold text-xs flex items-center gap-1.5 shadow-xs cursor-pointer transition-all active:scale-95"
+              title="Abrir o contador livre sem projeto"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>Contador Livre</span>
+            </button>
+
+            <button
               onClick={() => setShowNewModal(true)}
               className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer transition-all active:scale-95"
             >
@@ -193,10 +207,29 @@ export const ProjectListModal: React.FC<ProjectListModalProps> = ({
         {/* Project List */}
         <div className="p-5 overflow-y-auto space-y-3 flex-1">
           {filteredProjects.length === 0 ? (
-            <div className="text-center py-12 text-stone-400">
-              <Scissors className="w-12 h-12 mx-auto stroke-1 mb-2 opacity-50" />
-              <p className="font-semibold text-sm">Nenhum projeto encontrado</p>
-              <p className="text-xs mt-1">Crie um novo projeto acima ou ajuste sua busca.</p>
+            <div className="text-center py-12 text-stone-400 space-y-3">
+              <Sparkles className="w-12 h-12 mx-auto stroke-1 text-amber-500/60" />
+              <div>
+                <p className="font-extrabold text-stone-800 dark:text-stone-200 text-sm">
+                  {projects.length === 0 ? 'App iniciado zerado!' : 'Nenhum projeto encontrado'}
+                </p>
+                <p className="text-xs text-stone-500 dark:text-stone-400 mt-1 max-w-sm mx-auto">
+                  {projects.length === 0
+                    ? 'Você está usando o Contador Livre (sem necessidade de cadastrar projeto). Pode apenas colocar quantas voltas tem e ir passando!'
+                    : 'Ajuste sua busca ou crie um novo projeto.'}
+                </p>
+              </div>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    onSelectFreeCounter();
+                    onClose();
+                  }}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 cursor-pointer"
+                >
+                  Continuar no Contador Livre
+                </button>
+              </div>
             </div>
           ) : (
             filteredProjects.map((p) => {

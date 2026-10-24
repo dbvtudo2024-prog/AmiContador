@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { ColorReminder, ProjectPart } from '../types/amigurumi';
+import { ColorReminder } from '../types/amigurumi';
 import { X, Plus, Trash2, Palette, Sparkles } from 'lucide-react';
 
 interface ColorRemindersModalProps {
   isOpen: boolean;
   onClose: () => void;
-  part: ProjectPart;
-  onUpdatePart: (updatedPart: ProjectPart) => void;
+  partName?: string;
+  currentRound?: number;
+  colorReminders: ColorReminder[];
+  onUpdateReminders: (updated: ColorReminder[]) => void;
 }
 
 // Popular amigurumi yarn shades for quick picking
@@ -35,10 +37,12 @@ const POPULAR_YARN_COLORS = [
 export const ColorRemindersModal: React.FC<ColorRemindersModalProps> = ({
   isOpen,
   onClose,
-  part,
-  onUpdatePart,
+  partName = 'Peça Atual',
+  currentRound = 1,
+  colorReminders,
+  onUpdateReminders,
 }) => {
-  const [round, setRound] = useState<number>(part.currentRound || 1);
+  const [round, setRound] = useState<number>(currentRound || 1);
   const [colorName, setColorName] = useState<string>('Mostarda');
   const [colorHex, setColorHex] = useState<string>('#EAB308');
   const [note, setNote] = useState<string>('');
@@ -57,21 +61,14 @@ export const ColorRemindersModal: React.FC<ColorRemindersModalProps> = ({
       note: note.trim() || undefined,
     };
 
-    const updatedReminders = [...part.colorReminders, newReminder].sort((a, b) => a.round - b.round);
-    onUpdatePart({
-      ...part,
-      colorReminders: updatedReminders,
-    });
-
+    const updated = [...colorReminders, newReminder].sort((a, b) => a.round - b.round);
+    onUpdateReminders(updated);
     setNote('');
   };
 
   const handleDeleteReminder = (id: string) => {
-    const updated = part.colorReminders.filter((r) => r.id !== id);
-    onUpdatePart({
-      ...part,
-      colorReminders: updated,
-    });
+    const updated = colorReminders.filter((r) => r.id !== id);
+    onUpdateReminders(updated);
   };
 
   return (
@@ -88,7 +85,7 @@ export const ColorRemindersModal: React.FC<ColorRemindersModalProps> = ({
                 Lembretes de Troca de Cor
               </h3>
               <p className="text-xs text-stone-500 dark:text-stone-400">
-                Peça: <span className="font-semibold text-stone-700 dark:text-stone-200">{part.name}</span>
+                {partName} • Volta atual: <strong className="text-stone-700 dark:text-stone-200">{currentRound}</strong>
               </p>
             </div>
           </div>
@@ -116,7 +113,7 @@ export const ColorRemindersModal: React.FC<ColorRemindersModalProps> = ({
                 <input
                   type="number"
                   min="1"
-                  max="500"
+                  max="999"
                   value={round}
                   onChange={(e) => setRound(Math.max(1, parseInt(e.target.value) || 1))}
                   className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 font-bold focus:ring-2 focus:ring-amber-500 focus:outline-none"
@@ -187,7 +184,7 @@ export const ColorRemindersModal: React.FC<ColorRemindersModalProps> = ({
               </label>
               <input
                 type="text"
-                placeholder="Ex: Fazer troca na última laçada do ponto 30"
+                placeholder="Ex: Fazer troca na última laçada do ponto anterior"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-stone-300 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
@@ -208,21 +205,21 @@ export const ColorRemindersModal: React.FC<ColorRemindersModalProps> = ({
             <div className="flex items-center justify-between mb-3">
               <h4 className="text-sm font-bold text-stone-700 dark:text-stone-200 flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-pink-500" />
-                Cronograma de Cores ({part.colorReminders.length})
+                Cronograma de Cores ({colorReminders.length})
               </h4>
               <span className="text-xs text-stone-400">Ordenado por volta</span>
             </div>
 
-            {part.colorReminders.length === 0 ? (
+            {colorReminders.length === 0 ? (
               <div className="text-center p-6 rounded-2xl border border-dashed border-stone-200 dark:border-stone-800 text-stone-400 text-xs">
-                Nenhum lembrete de troca de cor cadastrado nesta peça.
+                Nenhum lembrete de troca de cor cadastrado.
                 <br />Adicione acima para ser avisado com som e alerta visual na volta certa!
               </div>
             ) : (
               <div className="space-y-2.5">
-                {part.colorReminders.map((rem) => {
-                  const isCurrent = part.currentRound === rem.round;
-                  const isPassed = part.currentRound > rem.round;
+                {colorReminders.map((rem) => {
+                  const isCurrent = currentRound === rem.round;
+                  const isPassed = currentRound > rem.round;
 
                   return (
                     <div
