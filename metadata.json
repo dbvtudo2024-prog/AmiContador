@@ -1,0 +1,6 @@
+{
+  "name": "AmiContador - Contador de Voltas para Amigurumi",
+  "description": "Contador inteligente de voltas e pontos para crochê e amigurumi com lembrete de troca de cor, projetos com partes anatômicas e sincronização em nuvem entre celular e PC.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
