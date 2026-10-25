@@ -179,7 +179,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
       }
 
       const text = await PatternParserService.extractTextFromPdf(res.blob);
-      const parsed = PatternParserService.parseCrochetText(text);
+      const parsed = PatternParserService.parseCrochetText(text, res.fileName);
       setExtracted(parsed);
       setActiveTab('extract');
     } catch (err: any) {
@@ -191,7 +191,10 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
 
   const handleParsePastedText = () => {
     if (!pastedText.trim()) return;
-    const parsed = PatternParserService.parseCrochetText(pastedText);
+    const parsed = PatternParserService.parseCrochetText(
+      pastedText,
+      project?.title || 'Receita Amigurumi'
+    );
     setExtracted(parsed);
     setActiveTab('extract');
   };
