@@ -13,7 +13,11 @@ import {
   Sparkles,
   Sun,
   Moon,
+  Calculator,
+  BookOpen,
+  Package,
 } from 'lucide-react';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface MenuDrawerModalProps {
   isOpen: boolean;
@@ -23,6 +27,9 @@ interface MenuDrawerModalProps {
   onOpenSync: () => void;
   onOpenPdf: () => void;
   onOpenSupabase: () => void;
+  onOpenCalculator?: () => void;
+  onOpenDictionary?: () => void;
+  onOpenYarnStash?: () => void;
   isSplitMode: boolean;
   onToggleSplitMode: () => void;
 }
@@ -35,6 +42,9 @@ export const MenuDrawerModal: React.FC<MenuDrawerModalProps> = ({
   onOpenSync,
   onOpenPdf,
   onOpenSupabase,
+  onOpenCalculator,
+  onOpenDictionary,
+  onOpenYarnStash,
   isSplitMode,
   onToggleSplitMode,
 }) => {
@@ -73,6 +83,64 @@ export const MenuDrawerModal: React.FC<MenuDrawerModalProps> = ({
 
         {/* Content */}
         <div className="p-4 overflow-y-auto space-y-4 flex-1 text-sm">
+          {/* PWA Install Promotion Card */}
+          <div className="p-1">
+            <PWAInstallButton variant="card" />
+          </div>
+
+          {/* Craft Tools */}
+          <div className="space-y-1.5">
+            <span className="text-[11px] font-bold text-stone-500 uppercase tracking-wider px-1">
+              Ferramentas do Ateliê
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenCalculator?.();
+                }}
+                className="p-2.5 rounded-2xl bg-white dark:bg-stone-800 border border-[#EADFCF] dark:border-stone-700 hover:border-[#C85A32] flex flex-col items-center text-center gap-1.5 cursor-pointer transition-all shadow-xs"
+              >
+                <div className="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-[#C85A32] flex items-center justify-center">
+                  <Calculator className="w-4 h-4" />
+                </div>
+                <span className="block font-bold text-[11px] text-[#2D2A26] dark:text-stone-200">
+                  Calculadora
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenDictionary?.();
+                }}
+                className="p-2.5 rounded-2xl bg-white dark:bg-stone-800 border border-[#EADFCF] dark:border-stone-700 hover:border-[#8C5E47] flex flex-col items-center text-center gap-1.5 cursor-pointer transition-all shadow-xs"
+              >
+                <div className="w-8 h-8 rounded-xl bg-stone-100 dark:bg-stone-700 text-[#8C5E47] dark:text-amber-300 flex items-center justify-center">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <span className="block font-bold text-[11px] text-[#2D2A26] dark:text-stone-200">
+                  Dicionário
+                </span>
+              </button>
+
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenYarnStash?.();
+                }}
+                className="p-2.5 rounded-2xl bg-white dark:bg-stone-800 border border-[#EADFCF] dark:border-stone-700 hover:border-emerald-500 flex flex-col items-center text-center gap-1.5 cursor-pointer transition-all shadow-xs"
+              >
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 flex items-center justify-center">
+                  <Package className="w-4 h-4" />
+                </div>
+                <span className="block font-bold text-[11px] text-[#2D2A26] dark:text-stone-200">
+                  Armarinho
+                </span>
+              </button>
+            </div>
+          </div>
+
           {/* Quick Actions Grid */}
           <div className="grid grid-cols-2 gap-2.5">
             <button

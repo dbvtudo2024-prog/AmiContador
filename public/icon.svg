@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="128" fill="#8C5E47"/>
+  <circle cx="256" cy="256" r="170" fill="#FAF5ED"/>
+  <!-- Yarn Ball -->
+  <circle cx="256" cy="256" r="140" fill="#C85A32"/>
+  <path d="M160 210 Q256 160 352 210" stroke="#FAF5ED" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <path d="M140 260 Q256 220 372 260" stroke="#FAF5ED" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <path d="M150 310 Q256 360 362 310" stroke="#FAF5ED" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <path d="M210 150 Q170 256 210 362" stroke="#FAF5ED" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M302 150 Q342 256 302 362" stroke="#FAF5ED" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <!-- Crochet Hook -->
+  <line x1="120" y1="400" x2="390" y2="130" stroke="#F4A261" stroke-width="18" stroke-linecap="round"/>
+  <path d="M390 130 Q410 110 395 100 Q380 95 375 115" stroke="#F4A261" stroke-width="14" fill="none" stroke-linecap="round"/>
+</svg>

@@ -1,16 +1,20 @@
-import { AmigurumiProject, AppSettings, ProjectPart, SupabaseConfig, QuickCounter } from '../types/amigurumi';
+import { AmigurumiProject, AppSettings, ProjectPart, SupabaseConfig, QuickCounter, YarnItem, PricingCalculation } from '../types/amigurumi';
 
 const PROJECTS_STORAGE_KEY = 'amicontador_projects_v1';
 const ACTIVE_PROJECT_ID_KEY = 'amicontador_active_project_id';
 const SETTINGS_STORAGE_KEY = 'amicontador_settings_v1';
 const SUPABASE_CONFIG_KEY = 'amicontador_supabase_config_v1';
 const QUICK_COUNTER_STORAGE_KEY = 'amicontador_quick_counter_v1';
+const YARN_STASH_STORAGE_KEY = 'amicontador_yarn_stash_v1';
+const PRICING_HISTORY_STORAGE_KEY = 'amicontador_pricing_history_v1';
 
 export const DEFAULT_QUICK_COUNTER: QuickCounter = {
   currentRound: 1,
   targetRounds: 0,
   currentStitch: 0,
   targetStitches: 0,
+  roundHistory: {},
+  roundTargets: {},
   colorReminders: [],
   notes: '',
 };
@@ -293,6 +297,13 @@ export const StorageService = {
     const partId = 'part_' + Math.random().toString(36).substring(2, 8);
     const resolvedPartName = (partName && partName.trim()) || 'Peça Principal';
 
+    const mergedRoundStitches: Record<number, number> = {
+      ...(counter.roundHistory || {}),
+      ...(counter.roundTargets || {}),
+      ...(counter.targetStitches > 0 ? { [counter.currentRound]: counter.targetStitches } : {}),
+      ...(counter.currentStitch > 0 && !counter.targetStitches ? { [counter.currentRound]: counter.currentStitch } : {}),
+    };
+
     const newProject: AmigurumiProject = {
       id: projectId,
       title: title.trim() || 'Meu Amigurumi',
@@ -303,6 +314,7 @@ export const StorageService = {
       notes: counter.notes || '',
       status: 'active',
       activePartId: partId,
+      totalTimeSeconds: counter.totalTimeSeconds || 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       parts: [
@@ -315,6 +327,7 @@ export const StorageService = {
           targetStitches: counter.targetStitches || 6,
           isCompleted: false,
           order: 1,
+          roundStitches: mergedRoundStitches,
           colorReminders: counter.colorReminders || [],
           notes: counter.notes,
         },
@@ -331,6 +344,13 @@ export const StorageService = {
     const partId = 'part_' + Math.random().toString(36).substring(2, 8);
     const resolvedPartName = (partName && partName.trim()) || `Peça ${project.parts.length + 1}`;
 
+    const mergedRoundStitches: Record<number, number> = {
+      ...(counter.roundHistory || {}),
+      ...(counter.roundTargets || {}),
+      ...(counter.targetStitches > 0 ? { [counter.currentRound]: counter.targetStitches } : {}),
+      ...(counter.currentStitch > 0 && !counter.targetStitches ? { [counter.currentRound]: counter.currentStitch } : {}),
+    };
+
     const newPart: ProjectPart = {
       id: partId,
       name: resolvedPartName,
@@ -340,6 +360,7 @@ export const StorageService = {
       targetStitches: counter.targetStitches || 6,
       isCompleted: false,
       order: project.parts.length + 1,
+      roundStitches: mergedRoundStitches,
       colorReminders: counter.colorReminders || [],
       notes: counter.notes,
     };
@@ -738,5 +759,63 @@ export const StorageService = {
     } catch {
       return null;
     }
+  },
+
+  // Yarn Stash
+  getYarnStash(): YarnItem[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(YARN_STASH_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  saveYarnItem(item: YarnItem): YarnItem {
+    const list = this.getYarnStash();
+    const idx = list.findIndex((y) => y.id === item.id);
+    if (idx >= 0) {
+      list[idx] = item;
+    } else {
+      list.unshift(item);
+    }
+    localStorage.setItem(YARN_STASH_STORAGE_KEY, JSON.stringify(list));
+    return item;
+  },
+
+  deleteYarnItem(id: string): boolean {
+    const list = this.getYarnStash().filter((y) => y.id !== id);
+    localStorage.setItem(YARN_STASH_STORAGE_KEY, JSON.stringify(list));
+    return true;
+  },
+
+  // Pricing History
+  getPricingHistory(): PricingCalculation[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(PRICING_HISTORY_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  savePricingCalculation(calc: PricingCalculation): PricingCalculation {
+    const list = this.getPricingHistory();
+    const idx = list.findIndex((c) => c.id === calc.id);
+    if (idx >= 0) {
+      list[idx] = calc;
+    } else {
+      list.unshift(calc);
+    }
+    localStorage.setItem(PRICING_HISTORY_STORAGE_KEY, JSON.stringify(list));
+    return calc;
+  },
+
+  deletePricingCalculation(id: string): boolean {
+    const list = this.getPricingHistory().filter((c) => c.id !== id);
+    localStorage.setItem(PRICING_HISTORY_STORAGE_KEY, JSON.stringify(list));
+    return true;
   },
 };

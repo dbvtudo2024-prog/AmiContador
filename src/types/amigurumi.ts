@@ -32,6 +32,8 @@ export interface AmigurumiProject {
   parts: ProjectPart[];
   activePartId: string;
   status: 'active' | 'completed' | 'archived';
+  totalTimeSeconds?: number;
+  isTimerRunning?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,8 +43,12 @@ export interface QuickCounter {
   targetRounds: number;
   currentStitch: number;
   targetStitches: number;
+  roundHistory?: Record<number, number>;
+  roundTargets?: Record<number, number>;
   colorReminders: ColorReminder[];
   notes?: string;
+  totalTimeSeconds?: number;
+  isTimerRunning?: boolean;
 }
 
 export interface AppSettings {
@@ -61,4 +67,33 @@ export interface SupabaseConfig {
   tableName: string;
   isEnabled: boolean;
   lastSyncedAt: string | null;
+}
+
+export interface YarnItem {
+  id: string;
+  brand: string;
+  colorName: string;
+  colorCode: string;
+  lotNumber?: string;
+  quantityStatus: 'full' | 'half' | 'scraps';
+  colorHex: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PricingCalculation {
+  id: string;
+  pieceName: string;
+  timeSeconds: number;
+  hourlyRate: number;
+  yarnCost: number;
+  fillingCost: number;
+  eyesCost: number;
+  accessoriesCost: number;
+  packagingCost: number;
+  profitMarginPercent: number;
+  totalLaborCost: number;
+  totalMaterialsCost: number;
+  suggestedPrice: number;
+  createdAt: string;
 }

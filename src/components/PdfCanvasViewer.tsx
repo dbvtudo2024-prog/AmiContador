@@ -13,6 +13,7 @@ import {
   AlertCircle,
   FileText,
   RotateCw,
+  Highlighter,
 } from 'lucide-react';
 
 // Setup local worker via Vite URL import
@@ -43,6 +44,8 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
   const [rendering, setRendering] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [blobUrl, setBlobUrl] = useState<string>('');
+  const [showRuler, setShowRuler] = useState<boolean>(false);
+  const [rulerTop, setRulerTop] = useState<number>(100);
 
   // Keep active render task to cancel if page/scale changes quickly
   const renderTaskRef = useRef<any>(null);
@@ -323,6 +326,20 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
           >
             <RotateCw className="w-3.5 h-3.5" />
           </button>
+
+          <button
+            type="button"
+            onClick={() => setShowRuler(!showRuler)}
+            className={`px-2 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer ml-1 ${
+              showRuler
+                ? 'bg-amber-500 text-white shadow-xs'
+                : 'bg-stone-800 hover:bg-stone-700 text-stone-300'
+            }`}
+            title="Ativar marcador de linha para acompanhar a leitura da receita"
+          >
+            <Highlighter className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Marca-texto</span>
+          </button>
         </div>
 
         {/* Right: Open in new tab & Download */}
@@ -350,8 +367,29 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
 
       {/* Canvas Viewport (Scrollable with zoom) */}
       <div className="flex-1 overflow-auto p-4 flex items-start justify-center bg-[#292622]">
-        <div className="relative shadow-2xl rounded-lg overflow-hidden border border-stone-700/60 bg-white">
+        <div
+          className="relative shadow-2xl rounded-lg overflow-hidden border border-stone-700/60 bg-white"
+          onClick={(e) => {
+            if (showRuler) {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setRulerTop(Math.max(0, e.clientY - rect.top - 16));
+            }
+          }}
+        >
           <canvas ref={canvasRef} className="block max-w-none" />
+
+          {/* Movable pattern line highlighter */}
+          {showRuler && (
+            <div
+              style={{ top: `${rulerTop}px` }}
+              className="absolute inset-x-0 h-8 bg-yellow-400/35 border-y-2 border-yellow-500 z-10 flex items-center justify-between px-2 select-none shadow-xs pointer-events-none transition-all duration-75"
+            >
+              <span className="text-[10px] font-extrabold text-amber-950 bg-amber-300/95 px-1.5 py-0.5 rounded shadow-2xs">
+                📍 Linha da receita (clique no PDF para posicionar)
+              </span>
+            </div>
+          )}
+
           {rendering && (
             <div className="absolute top-2 right-2 px-2 py-1 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1.5 pointer-events-none">
               <RefreshCw className="w-3 h-3 animate-spin text-amber-400" />

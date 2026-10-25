@@ -17,7 +17,12 @@ import {
   Check,
   Pencil,
   Sparkles,
+  History,
+  Mic,
+  MicOff,
 } from 'lucide-react';
+import { ProjectStopwatch } from './ProjectStopwatch';
+import { speechService } from '../services/speech';
 
 interface FreeCounterViewProps {
   counter: QuickCounter;
@@ -45,12 +50,17 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [projectTitleInput, setProjectTitleInput] = useState('');
   const [partNameInput, setPartNameInput] = useState('');
+  const [showResetAllConfirm, setShowResetAllConfirm] = useState(false);
 
   // Target rounds collapsed state: collapses when user confirms to keep the "+1 VOLTA" button high up on mobile!
   const [isTargetCollapsed, setIsTargetCollapsed] = useState<boolean>(counter.targetRounds > 0);
   const [targetInputValue, setTargetInputValue] = useState<string>(
     counter.targetRounds > 0 ? String(counter.targetRounds) : ''
   );
+
+  // Hands-free voice recognition state
+  const [isListening, setIsListening] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
 
   // Sync internal input value if counter changes from outside
   useEffect(() => {
@@ -101,33 +111,63 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
     [counter.targetRounds, settings]
   );
 
-  // Increment Round
+  // Increment Round - saves current round stitches, resets to 0 (or previous count) for next round
   const handleIncrementRound = useCallback(() => {
     const nextRound = counter.currentRound + 1;
     soundEffects.playRoundChime(settings.soundEnabled, settings.soundVolume);
     soundEffects.vibrate(60, settings.vibrationEnabled);
 
+    const updatedHistory = {
+      ...(counter.roundHistory || {}),
+      [counter.currentRound]: counter.currentStitch,
+    };
+    const updatedTargets = {
+      ...(counter.roundTargets || {}),
+      ...(counter.targetStitches > 0 ? { [counter.currentRound]: counter.targetStitches } : {}),
+    };
+
+    const nextStitch = updatedHistory[nextRound] ?? 0;
+    const nextTarget = updatedTargets[nextRound] ?? 0;
+
     onUpdateCounter({
       ...counter,
       currentRound: nextRound,
-      currentStitch: 0,
+      currentStitch: nextStitch,
+      targetStitches: nextTarget,
+      roundHistory: updatedHistory,
+      roundTargets: updatedTargets,
     });
 
     checkColorAlert(nextRound);
     checkVictory(nextRound);
   }, [counter, settings, onUpdateCounter, checkColorAlert, checkVictory]);
 
-  // Decrement Round
+  // Decrement Round - saves current round stitches, restores previous round stitches
   const handleDecrementRound = useCallback(() => {
     if (counter.currentRound <= 1) return;
     const prevRound = counter.currentRound - 1;
     soundEffects.playStitchClick(settings.soundEnabled, settings.soundVolume);
     soundEffects.vibrate(30, settings.vibrationEnabled);
 
+    const updatedHistory = {
+      ...(counter.roundHistory || {}),
+      [counter.currentRound]: counter.currentStitch,
+    };
+    const updatedTargets = {
+      ...(counter.roundTargets || {}),
+      ...(counter.targetStitches > 0 ? { [counter.currentRound]: counter.targetStitches } : {}),
+    };
+
+    const prevStitch = updatedHistory[prevRound] ?? 0;
+    const prevTarget = updatedTargets[prevRound] ?? 0;
+
     onUpdateCounter({
       ...counter,
       currentRound: prevRound,
-      currentStitch: 0,
+      currentStitch: prevStitch,
+      targetStitches: prevTarget,
+      roundHistory: updatedHistory,
+      roundTargets: updatedTargets,
     });
   }, [counter, settings, onUpdateCounter]);
 
@@ -150,24 +190,72 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
       counter.targetStitches > 0 &&
       nextStitch >= counter.targetStitches
     ) {
-      handleIncrementRound();
+      // Auto-advance round: save current round completed and jump to next
+      const updatedHistory = {
+        ...(counter.roundHistory || {}),
+        [counter.currentRound]: nextStitch,
+      };
+      const updatedTargets = {
+        ...(counter.roundTargets || {}),
+        [counter.currentRound]: counter.targetStitches,
+      };
+      const nextRound = counter.currentRound + 1;
+      const nextRoundStitch = updatedHistory[nextRound] ?? 0;
+      const nextRoundTarget = updatedTargets[nextRound] ?? 0;
+
+      onUpdateCounter({
+        ...counter,
+        currentRound: nextRound,
+        currentStitch: nextRoundStitch,
+        targetStitches: nextRoundTarget,
+        roundHistory: updatedHistory,
+        roundTargets: updatedTargets,
+      });
+
+      checkColorAlert(nextRound);
+      checkVictory(nextRound);
     } else {
       const cappedStitch = counter.targetStitches > 0 ? Math.min(nextStitch, counter.targetStitches) : nextStitch;
-      onUpdateCounter({ ...counter, currentStitch: cappedStitch });
+      const updatedHistory = {
+        ...(counter.roundHistory || {}),
+        [counter.currentRound]: cappedStitch,
+      };
+      onUpdateCounter({
+        ...counter,
+        currentStitch: cappedStitch,
+        roundHistory: updatedHistory,
+      });
     }
-  }, [counter, settings, onUpdateCounter, handleIncrementRound]);
+  }, [counter, settings, onUpdateCounter, handleIncrementRound, checkColorAlert, checkVictory]);
 
   // Decrement Stitch
   const handleDecrementStitch = useCallback(() => {
     if (counter.currentStitch <= 0) return;
     soundEffects.playStitchClick(settings.soundEnabled, settings.soundVolume);
     soundEffects.vibrate(20, settings.vibrationEnabled);
-    onUpdateCounter({ ...counter, currentStitch: counter.currentStitch - 1 });
+    const nextStitch = counter.currentStitch - 1;
+    const updatedHistory = {
+      ...(counter.roundHistory || {}),
+      [counter.currentRound]: nextStitch,
+    };
+    onUpdateCounter({
+      ...counter,
+      currentStitch: nextStitch,
+      roundHistory: updatedHistory,
+    });
   }, [counter, settings, onUpdateCounter]);
 
   // Reset Stitches in current round
   const handleResetStitches = () => {
-    onUpdateCounter({ ...counter, currentStitch: 0 });
+    const updatedHistory = {
+      ...(counter.roundHistory || {}),
+      [counter.currentRound]: 0,
+    };
+    onUpdateCounter({
+      ...counter,
+      currentStitch: 0,
+      roundHistory: updatedHistory,
+    });
     soundEffects.vibrate(40, settings.vibrationEnabled);
   };
 
@@ -176,12 +264,52 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
     e.preventDefault();
     const target = parseInt(jumpRoundInput);
     if (!isNaN(target) && target >= 1) {
-      onUpdateCounter({ ...counter, currentRound: target, currentStitch: 0 });
+      const updatedHistory = {
+        ...(counter.roundHistory || {}),
+        [counter.currentRound]: counter.currentStitch,
+      };
+      const updatedTargets = {
+        ...(counter.roundTargets || {}),
+        ...(counter.targetStitches > 0 ? { [counter.currentRound]: counter.targetStitches } : {}),
+      };
+
+      onUpdateCounter({
+        ...counter,
+        currentRound: target,
+        currentStitch: updatedHistory[target] ?? 0,
+        targetStitches: updatedTargets[target] ?? 0,
+        roundHistory: updatedHistory,
+        roundTargets: updatedTargets,
+      });
       checkColorAlert(target);
       checkVictory(target);
     }
     setShowJumpModal(false);
     setJumpRoundInput('');
+  };
+
+  // Jump directly to a round when clicked on history badge
+  const handleSelectRoundFromHistory = (targetRound: number) => {
+    if (targetRound === counter.currentRound) return;
+    const updatedHistory = {
+      ...(counter.roundHistory || {}),
+      [counter.currentRound]: counter.currentStitch,
+    };
+    const updatedTargets = {
+      ...(counter.roundTargets || {}),
+      ...(counter.targetStitches > 0 ? { [counter.currentRound]: counter.targetStitches } : {}),
+    };
+
+    onUpdateCounter({
+      ...counter,
+      currentRound: targetRound,
+      currentStitch: updatedHistory[targetRound] ?? 0,
+      targetStitches: updatedTargets[targetRound] ?? 0,
+      roundHistory: updatedHistory,
+      roundTargets: updatedTargets,
+    });
+    checkColorAlert(targetRound);
+    checkVictory(targetRound);
   };
 
   // Confirm target rounds & collapse the section to pull buttons high up
@@ -240,9 +368,49 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleIncrementRound, handleDecrementRound, handleIncrementStitch, handleDecrementStitch]);
 
+  // Hands-free voice recognition toggle
+  const toggleVoiceControl = useCallback(() => {
+    if (!speechService.isSupported()) {
+      alert('Seu navegador não possui suporte ao microfone para reconhecimento de voz.');
+      return;
+    }
+    if (isListening) {
+      speechService.stop();
+      setIsListening(false);
+      setVoiceFeedback(null);
+    } else {
+      speechService.start({
+        onCommand: (command, transcript) => {
+          if (command === 'stitch_inc') {
+            handleIncrementStitch();
+            setVoiceFeedback(`+1 ponto ("${transcript}")`);
+          } else if (command === 'stitch_dec') {
+            handleDecrementStitch();
+            setVoiceFeedback(`-1 ponto ("${transcript}")`);
+          } else if (command === 'round_inc') {
+            handleIncrementRound();
+            setVoiceFeedback(`+1 volta ("${transcript}")`);
+          }
+          setTimeout(() => setVoiceFeedback(null), 2500);
+        },
+        onStatusChange: (listening) => {
+          setIsListening(listening);
+        },
+        onError: () => {},
+      });
+      setIsListening(true);
+    }
+  }, [isListening, handleIncrementStitch, handleDecrementStitch, handleIncrementRound]);
+
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
   return (
     <div className="w-full max-w-xl mx-auto space-y-2.5 sm:space-y-3.5 pb-16 animate-fade-in">
-      {/* 1. Slim Top Bar: Mode indicator, Save & Reset buttons (takes zero wasted height!) */}
+      {/* 1. Slim Top Bar: Mode indicator, Voice control, Save & Reset buttons */}
       <div className="flex items-center justify-between px-1.5 py-1">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-[#C85A32]/15 flex items-center justify-center shrink-0">
@@ -253,7 +421,31 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Hands-Free Voice Control Button */}
+          <button
+            onClick={toggleVoiceControl}
+            className={`px-2.5 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+              isListening
+                ? 'bg-rose-500 text-white border-rose-600 animate-pulse'
+                : 'bg-[#FAF5ED] hover:bg-[#F2ECE1] dark:bg-stone-800 text-[#2D2824] dark:text-stone-100 border-[#D6C8B8] dark:border-stone-700'
+            }`}
+            title={
+              isListening
+                ? 'Comando de voz ativo! Fale: "ponto", "desmancha" ou "volta"'
+                : 'Ativar controle por voz sem as mãos (fale "ponto" ou "volta")'
+            }
+          >
+            {isListening ? (
+              <Mic className="w-3.5 h-3.5 text-white" />
+            ) : (
+              <MicOff className="w-3.5 h-3.5 text-[#8C5E47] dark:text-stone-300" />
+            )}
+            <span className="hidden sm:inline">
+              {isListening ? 'Ouvindo...' : 'Voz'}
+            </span>
+          </button>
+
           <button
             onClick={() => setShowSaveModal(true)}
             className="px-3 py-1.5 rounded-xl bg-[#FAF5ED] hover:bg-[#F2ECE1] dark:bg-stone-800 text-[#2D2824] dark:text-stone-100 border border-[#D6C8B8] dark:border-stone-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
@@ -263,19 +455,61 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
             <span>Salvar</span>
           </button>
 
-          <button
-            onClick={() => {
-              if (window.confirm('Deseja zerar as voltas e pontos?')) {
-                onResetCounter();
-              }
-            }}
-            className="p-1.5 rounded-xl text-[#6D5E52] hover:text-[#2D2824] dark:text-stone-300 dark:hover:text-stone-100 hover:bg-[#FAF5ED] dark:hover:bg-stone-800 transition-colors cursor-pointer"
-            title="Zerar Contador"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+          {showResetAllConfirm ? (
+            <div className="flex items-center gap-1.5 bg-[#FFF2E8] dark:bg-stone-900 border border-[#E76F51]/60 px-2 py-1 rounded-xl shadow-xs animate-fade-in">
+              <span className="text-[11px] font-bold text-[#8C5E47] dark:text-amber-300">
+                Zerar tudo?
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetAllConfirm(false);
+                  onResetCounter();
+                }}
+                className="px-2 py-0.5 rounded-lg bg-[#C85A32] hover:bg-[#B24822] text-white text-[10px] font-bold cursor-pointer transition-colors shadow-2xs"
+                title="Confirmar zerar todas as voltas e pontos"
+              >
+                Sim
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowResetAllConfirm(false)}
+                className="px-1.5 py-0.5 rounded-lg bg-[#EDE4D6] hover:bg-[#E0D4C2] dark:bg-stone-800 dark:hover:bg-stone-700 text-stone-600 dark:text-stone-300 text-[10px] font-semibold cursor-pointer transition-colors"
+                title="Cancelar"
+              >
+                Não
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowResetAllConfirm(true)}
+              className="p-1.5 rounded-xl text-[#6D5E52] hover:text-[#2D2824] dark:text-stone-300 dark:hover:text-stone-100 hover:bg-[#FAF5ED] dark:hover:bg-stone-800 transition-colors cursor-pointer flex items-center gap-1"
+              title="Zerar todas as voltas e pontos"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span className="text-xs font-bold hidden sm:inline">Zerar tudo</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Voice Recognition Feedback Alert */}
+      {voiceFeedback && (
+        <div className="px-3 py-1.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center justify-center gap-2 shadow-xs animate-fade-in">
+          <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
+          <span>Comando de voz: {voiceFeedback}</span>
+        </div>
+      )}
+
+      {/* Stopwatch Timer */}
+      <ProjectStopwatch
+        totalSeconds={counter.totalTimeSeconds || 0}
+        isRunning={counter.isTimerRunning}
+        onUpdateSeconds={(sec) => onUpdateCounter({ ...counter, totalTimeSeconds: sec })}
+        onToggleRunning={(running) => onUpdateCounter({ ...counter, isTimerRunning: running })}
+        soundEnabled={settings.soundEnabled}
+        vibrationEnabled={settings.vibrationEnabled}
+      />
 
       {/* 2. DYNAMIC COLLAPSIBLE TARGET ROUNDS SECTION */}
       {isTargetCollapsed ? (
@@ -550,7 +784,11 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
                     value={counter.targetStitches > 0 ? counter.targetStitches : ''}
                     onChange={(e) => {
                       const val = Math.max(0, parseInt(e.target.value, 10) || 0);
-                      onUpdateCounter({ ...counter, targetStitches: val });
+                      const updatedTargets = {
+                        ...(counter.roundTargets || {}),
+                        [counter.currentRound]: val,
+                      };
+                      onUpdateCounter({ ...counter, targetStitches: val, roundTargets: updatedTargets });
                     }}
                     className="w-12 text-center font-black text-xs text-[#2D2824] dark:text-stone-100 font-mono-numbers bg-transparent focus:outline-none"
                     title="Quantidade total de pontos que a receita pede nesta volta"
@@ -561,11 +799,11 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
                 <button
                   onClick={handleResetStitches}
                   disabled={counter.currentStitch === 0}
-                  className="text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Zerar pontos contados"
+                  className="text-[11px] text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-1 cursor-pointer transition-colors px-1.5 py-0.5 rounded-lg hover:bg-[#EAE0D2] dark:hover:bg-stone-700"
+                  title="Zerar pontos contados nesta volta (não altera o cronômetro)"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>Zerar</span>
+                  <span className="font-semibold">Zerar pts</span>
                 </button>
               </div>
             </div>
@@ -631,7 +869,13 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
                 <button
                   key={num}
                   type="button"
-                  onClick={() => onUpdateCounter({ ...counter, targetStitches: num })}
+                  onClick={() => {
+                    const updatedTargets = {
+                      ...(counter.roundTargets || {}),
+                      [counter.currentRound]: num,
+                    };
+                    onUpdateCounter({ ...counter, targetStitches: num, roundTargets: updatedTargets });
+                  }}
                   className={`px-2 py-0.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                     counter.targetStitches === num
                       ? 'bg-[#8C5E47] text-white shadow-xs'
@@ -645,12 +889,93 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
               {counter.targetStitches > 0 && (
                 <button
                   type="button"
-                  onClick={() => onUpdateCounter({ ...counter, targetStitches: 0 })}
+                  onClick={() => {
+                    const updatedTargets = {
+                      ...(counter.roundTargets || {}),
+                      [counter.currentRound]: 0,
+                    };
+                    onUpdateCounter({ ...counter, targetStitches: 0, roundTargets: updatedTargets });
+                  }}
                   className="text-[10px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 underline ml-auto cursor-pointer"
                 >
                   Limpar
                 </button>
               )}
+            </div>
+
+            {/* 6. Round-by-Round History Strip & Total Stitches */}
+            <div className="pt-2.5 border-t border-[#EAE0D2] dark:border-stone-700/60">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="font-bold text-stone-700 dark:text-stone-300 flex items-center gap-1.5 font-comfortaa">
+                  <History className="w-3.5 h-3.5 text-[#C85A32]" />
+                  <span>Histórico de Pontos por Volta</span>
+                </span>
+
+                <span className="text-[11px] font-bold text-[#8C5E47] dark:text-amber-400 bg-[#EDE4D6] dark:bg-stone-800 px-2 py-0.5 rounded-full">
+                  Total: {Object.entries({
+                    ...(counter.roundHistory || {}),
+                    [counter.currentRound]: counter.currentStitch,
+                  }).reduce((sum, [, pts]) => sum + (Number(pts) || 0), 0)} pts
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 scrollbar-thin">
+                {Array.from(
+                  new Set([
+                    ...Object.keys(counter.roundHistory || {}).map(Number),
+                    ...Object.keys(counter.roundTargets || {}).map(Number),
+                    counter.currentRound,
+                  ])
+                )
+                  .filter((n) => !isNaN(n) && n >= 1)
+                  .sort((a, b) => a - b)
+                  .map((roundNum) => {
+                    const isCurrent = roundNum === counter.currentRound;
+                    const stitches = isCurrent
+                      ? counter.currentStitch
+                      : counter.roundHistory?.[roundNum] ?? 0;
+                    const target = isCurrent
+                      ? counter.targetStitches
+                      : counter.roundTargets?.[roundNum] ?? 0;
+
+                    return (
+                      <button
+                        key={roundNum}
+                        type="button"
+                        onClick={() => handleSelectRoundFromHistory(roundNum)}
+                        className={`shrink-0 px-2.5 py-1.5 rounded-xl text-left border transition-all cursor-pointer flex flex-col gap-0.5 ${
+                          isCurrent
+                            ? 'bg-[#C85A32] text-white border-[#C85A32] shadow-xs'
+                            : stitches > 0
+                            ? 'bg-[#FAF5ED] dark:bg-stone-800 border-[#D6C8B8] dark:border-stone-700 hover:border-[#C85A32] text-[#2D2824] dark:text-stone-200'
+                            : 'bg-[#F2ECE1]/60 dark:bg-stone-800/40 border-[#E2D6C5] dark:border-stone-800 text-stone-400 dark:text-stone-500'
+                        }`}
+                        title={`Volta ${roundNum}: ${stitches} pontos. Clique para ir a esta volta.`}
+                      >
+                        <div className="flex items-center justify-between gap-1.5">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider ${isCurrent ? 'text-white/90' : 'text-stone-500 dark:text-stone-400'}`}>
+                            V{roundNum} {isCurrent && '• Atual'}
+                          </span>
+                          {stitches > 0 && target > 0 && stitches >= target && (
+                            <span className={isCurrent ? 'text-white text-[10px]' : 'text-emerald-600 text-[10px]'}>✓</span>
+                          )}
+                        </div>
+                        <span className={`text-xs font-black font-mono-numbers ${isCurrent ? 'text-white' : 'text-[#2D2824] dark:text-stone-100'}`}>
+                          {stitches}
+                          {target > 0 && (
+                            <span className={`font-normal text-[10px] ml-0.5 ${isCurrent ? 'text-white/80' : 'text-stone-400'}`}>
+                              /{target}
+                            </span>
+                          )}{' '}
+                          <span className={`text-[9px] font-medium ${isCurrent ? 'text-white/80' : 'text-stone-400'}`}>pts</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+              <p className="text-[10px] text-stone-400 dark:text-stone-500 mt-1">
+                Toque em qualquer volta para conferir ou ajustar os pontos gravados.
+              </p>
             </div>
           </div>
         )}

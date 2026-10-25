@@ -11,7 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { soundEffects } from '../services/soundEffects';
+import { soundEffects } from '../services/audio';
 import { AppSettings, ProjectPart } from '../types/amigurumi';
 
 interface FloatingCounterOverlayProps {
@@ -234,11 +234,11 @@ export const FloatingCounterOverlay: React.FC<FloatingCounterOverlayProps> = ({
             <button
               onClick={onResetStitches}
               disabled={currentStitch === 0}
-              className="text-[10px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-0.5 cursor-pointer"
-              title="Zerar pontos"
+              className="text-[10px] text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-0.5 cursor-pointer"
+              title="Zerar pontos contados nesta volta (não altera o cronômetro)"
             >
               <RotateCcw className="w-2.5 h-2.5" />
-              <span>Zerar</span>
+              <span>Zerar pts</span>
             </button>
           </div>
 

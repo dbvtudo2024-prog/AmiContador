@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AmigurumiProject, ProjectPart } from '../types/amigurumi';
 import { PdfStorageService } from '../services/pdfStorage';
-import { PatternParserService, ExtractedPattern } from '../services/patternParser';
+import { PatternParserService, ExtractedPattern, sanitizePatternTitle } from '../services/patternParser';
 import {
   X,
   FileText,
@@ -25,6 +25,7 @@ interface PdfViewerModalProps {
   onClose: () => void;
   project: AmigurumiProject;
   onUpdateProject: (updatedProject: AmigurumiProject) => void;
+  onCreateProjectFromPdf?: (newProject: AmigurumiProject) => void;
   isSplitMode: boolean;
   onToggleSplitMode: () => void;
 }
@@ -34,6 +35,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
   onClose,
   project,
   onUpdateProject,
+  onCreateProjectFromPdf,
   isSplitMode,
   onToggleSplitMode,
 }) => {
@@ -87,15 +89,70 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
     try {
       setLoading(true);
       setErrorMessage(null);
-      await PdfStorageService.savePdf(project.id, file);
-      const res = await PdfStorageService.getPdf(project.id);
-      if (res) {
-        setPdfData({ fileName: res.fileName, blob: res.blob, url: res.url });
-        setSuccessMessage(`PDF "${file.name}" anexado com sucesso ao projeto!`);
-        setTimeout(() => setSuccessMessage(null), 3000);
+      setSuccessMessage('Analisando receita do PDF e identificando peças e voltas...');
+
+      // 1. Read text from PDF
+      let extractedText = '';
+      try {
+        extractedText = await PatternParserService.extractTextFromPdf(file);
+      } catch (parseErr) {
+        console.warn('Erro na extração de texto do PDF:', parseErr);
+      }
+
+      // 2. Parse pattern pieces and rounds
+      const parsed = PatternParserService.parseCrochetText(extractedText, file.name);
+      setExtracted(parsed);
+
+      const isFreeCounterFallback = !project || project.id === 'free_counter_pdf';
+
+      if (isFreeCounterFallback && onCreateProjectFromPdf) {
+        const newProjId = 'proj_' + Date.now();
+        const newProj: AmigurumiProject = {
+          id: newProjId,
+          title: parsed.detectedTitle || sanitizePatternTitle(file.name),
+          patternName: file.name,
+          hookSize: parsed.detectedHook || '2.5mm',
+          yarnBrand: parsed.detectedYarn || '',
+          category: 'Geral',
+          notes: 'Criado automaticamente a partir do PDF anexado.',
+          status: 'active',
+          parts: parsed.detectedParts,
+          activePartId: parsed.detectedParts[0]?.id || 'part_1',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        await PdfStorageService.savePdf(newProjId, file);
+        const res = await PdfStorageService.getPdf(newProjId);
+        if (res) {
+          setPdfData({ fileName: res.fileName, blob: res.blob, url: res.url });
+        }
+        onCreateProjectFromPdf(newProj);
+        setSuccessMessage(`🎉 Projeto "${newProj.title}" criado com ${newProj.parts.length} peças prontas para crochetar!`);
+      } else {
+        await PdfStorageService.savePdf(project.id, file);
+        const res = await PdfStorageService.getPdf(project.id);
+        if (res) {
+          setPdfData({ fileName: res.fileName, blob: res.blob, url: res.url });
+        }
+
+        const shouldApply = parsed.detectedParts.length > 0;
+        onUpdateProject({
+          ...project,
+          patternName: file.name,
+          parts: shouldApply ? parsed.detectedParts : project.parts,
+          activePartId: shouldApply ? parsed.detectedParts[0]?.id : project.activePartId,
+          updatedAt: new Date().toISOString(),
+        });
+
+        setSuccessMessage(
+          shouldApply
+            ? `PDF anexado e ${parsed.detectedParts.length} peça(s) atualizadas no projeto!`
+            : `PDF "${file.name}" anexado com sucesso ao projeto!`
+        );
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Erro ao salvar o arquivo PDF.');
+      setErrorMessage(err?.message || 'Erro ao processar o arquivo PDF.');
     } finally {
       setLoading(false);
       e.target.value = '';

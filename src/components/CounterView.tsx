@@ -19,6 +19,7 @@ import {
   Pencil,
   Check,
 } from 'lucide-react';
+import { ProjectStopwatch } from './ProjectStopwatch';
 
 interface CounterViewProps {
   project: AmigurumiProject;
@@ -261,6 +262,16 @@ export const CounterView: React.FC<CounterViewProps> = ({
 
   return (
     <div className="w-full max-w-xl mx-auto space-y-2.5 sm:space-y-3.5 pb-16">
+      {/* 0. Project Stopwatch Timer */}
+      <ProjectStopwatch
+        totalSeconds={project.totalTimeSeconds || 0}
+        isRunning={project.isTimerRunning}
+        onUpdateSeconds={(sec) => onUpdateProject({ ...project, totalTimeSeconds: sec })}
+        onToggleRunning={(running) => onUpdateProject({ ...project, isTimerRunning: running })}
+        soundEnabled={settings.soundEnabled}
+        vibrationEnabled={settings.vibrationEnabled}
+      />
+
       {/* 1. Part Selector Pills */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none px-0.5">
         {project.parts.map((part) => {
@@ -576,11 +587,11 @@ export const CounterView: React.FC<CounterViewProps> = ({
                 <button
                   onClick={handleResetStitches}
                   disabled={activePart.currentStitch === 0}
-                  className="text-[11px] text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-1 cursor-pointer transition-colors"
-                  title="Zerar pontos contados"
+                  className="text-[11px] text-stone-500 hover:text-stone-800 dark:hover:text-stone-200 disabled:opacity-30 flex items-center gap-1 cursor-pointer transition-colors px-1.5 py-0.5 rounded-lg hover:bg-[#EAE0D2] dark:hover:bg-stone-700"
+                  title="Zerar pontos contados nesta volta (não altera o cronômetro)"
                 >
                   <RotateCcw className="w-3 h-3" />
-                  <span>Zerar</span>
+                  <span className="font-semibold">Zerar pts</span>
                 </button>
               </div>
             </div>

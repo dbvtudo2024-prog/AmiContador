@@ -17,6 +17,12 @@ import { SupabaseModal } from './components/SupabaseModal';
 import { SettingsModal } from './components/SettingsModal';
 import { PdfViewerModal } from './components/PdfViewerModal';
 import { MenuDrawerModal } from './components/MenuDrawerModal';
+import { FloatingCounterOverlay } from './components/FloatingCounterOverlay';
+import { HomeHubView } from './components/HomeHubView';
+import { PricingCalculatorModal } from './components/PricingCalculatorModal';
+import { CrochetDictionaryModal } from './components/CrochetDictionaryModal';
+import { YarnStashModal } from './components/YarnStashModal';
+import { PWAInstallButton } from './components/PWAInstallButton';
 import {
   FolderOpen,
   Menu,
@@ -24,6 +30,11 @@ import {
   Check,
   Sun,
   Moon,
+  Home,
+  Calculator,
+  Hash,
+  BookOpen,
+  Package,
 } from 'lucide-react';
 
 export default function App() {
@@ -31,6 +42,9 @@ export default function App() {
   const [activeProjectId, setActiveProjectId] = useState<string>('free');
   const [quickCounter, setQuickCounter] = useState<QuickCounter>(StorageService.getQuickCounter());
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+
+  // Navigation: Main Menu Hub vs Stitch Counter View
+  const [activeScreen, setActiveScreen] = useState<'home' | 'counter'>('home');
 
   // Modals
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -42,6 +56,9 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPdfOpen, setIsPdfOpen] = useState(false);
   const [isSplitMode, setIsSplitMode] = useState(false);
+  const [isPricingOpen, setIsPricingOpen] = useState(false);
+  const [isDictionaryOpen, setIsDictionaryOpen] = useState(false);
+  const [isYarnStashOpen, setIsYarnStashOpen] = useState(false);
 
   // Color alert modal
   const [colorAlert, setColorAlert] = useState<{
@@ -173,15 +190,220 @@ export default function App() {
     setProjects((prev) => prev.map((p) => (p.id === saved.id ? saved : p)));
   };
 
+  // Create project automatically from parsed PDF
+  const handleCreateProjectFromPdf = (newProject: AmigurumiProject) => {
+    const saved = StorageService.saveProject(newProject);
+    const updated = StorageService.getAllProjects();
+    setProjects(updated);
+    setActiveProjectId(saved.id);
+    StorageService.setActiveProjectId(saved.id);
+    setIsPdfOpen(false);
+    setIsSplitMode(true);
+    showToast(`🎉 Projeto "${saved.title}" criado com ${saved.parts.length} peças!`);
+  };
+
+  // Overlay Counter Handlers (for mobile split/overlay view over PDF)
+  const handleOverlayIncrementRound = () => {
+    if (currentProject && currentProjectActivePart) {
+      const nextRound = currentProjectActivePart.currentRound + 1;
+      const nextStitches = currentProjectActivePart.roundStitches?.[nextRound] || currentProjectActivePart.targetStitches;
+      const updatedParts = currentProject.parts.map((p) =>
+        p.id === currentProjectActivePart.id
+          ? { ...p, currentRound: nextRound, currentStitch: 0, targetStitches: nextStitches }
+          : p
+      );
+      handleUpdateProject({ ...currentProject, parts: updatedParts });
+    } else {
+      const nextRound = quickCounter.currentRound + 1;
+      const updatedHistory = {
+        ...(quickCounter.roundHistory || {}),
+        [quickCounter.currentRound]: quickCounter.currentStitch,
+      };
+      const updatedTargets = {
+        ...(quickCounter.roundTargets || {}),
+        ...(quickCounter.targetStitches > 0 ? { [quickCounter.currentRound]: quickCounter.targetStitches } : {}),
+      };
+      handleUpdateQuickCounter({
+        ...quickCounter,
+        currentRound: nextRound,
+        currentStitch: updatedHistory[nextRound] ?? 0,
+        targetStitches: updatedTargets[nextRound] ?? 0,
+        roundHistory: updatedHistory,
+        roundTargets: updatedTargets,
+      });
+    }
+  };
+
+  const handleOverlayDecrementRound = () => {
+    if (currentProject && currentProjectActivePart) {
+      if (currentProjectActivePart.currentRound <= 1) return;
+      const prevRound = currentProjectActivePart.currentRound - 1;
+      const prevStitches = currentProjectActivePart.roundStitches?.[prevRound] || currentProjectActivePart.targetStitches;
+      const updatedParts = currentProject.parts.map((p) =>
+        p.id === currentProjectActivePart.id
+          ? { ...p, currentRound: prevRound, currentStitch: 0, targetStitches: prevStitches }
+          : p
+      );
+      handleUpdateProject({ ...currentProject, parts: updatedParts });
+    } else {
+      if (quickCounter.currentRound <= 1) return;
+      const prevRound = quickCounter.currentRound - 1;
+      const updatedHistory = {
+        ...(quickCounter.roundHistory || {}),
+        [quickCounter.currentRound]: quickCounter.currentStitch,
+      };
+      const updatedTargets = {
+        ...(quickCounter.roundTargets || {}),
+        ...(quickCounter.targetStitches > 0 ? { [quickCounter.currentRound]: quickCounter.targetStitches } : {}),
+      };
+      handleUpdateQuickCounter({
+        ...quickCounter,
+        currentRound: prevRound,
+        currentStitch: updatedHistory[prevRound] ?? 0,
+        targetStitches: updatedTargets[prevRound] ?? 0,
+        roundHistory: updatedHistory,
+        roundTargets: updatedTargets,
+      });
+    }
+  };
+
+  const handleOverlayIncrementStitch = () => {
+    if (currentProject && currentProjectActivePart) {
+      if (
+        currentProjectActivePart.targetStitches > 0 &&
+        currentProjectActivePart.currentStitch >= currentProjectActivePart.targetStitches
+      ) {
+        if (settings.autoAdvanceRound) {
+          handleOverlayIncrementRound();
+        }
+        return;
+      }
+      const nextStitch = currentProjectActivePart.currentStitch + 1;
+      if (
+        settings.autoAdvanceRound &&
+        currentProjectActivePart.targetStitches > 0 &&
+        nextStitch >= currentProjectActivePart.targetStitches
+      ) {
+        handleOverlayIncrementRound();
+      } else {
+        const capped = currentProjectActivePart.targetStitches > 0
+          ? Math.min(nextStitch, currentProjectActivePart.targetStitches)
+          : nextStitch;
+        const updatedParts = currentProject.parts.map((p) =>
+          p.id === currentProjectActivePart.id ? { ...p, currentStitch: capped } : p
+        );
+        handleUpdateProject({ ...currentProject, parts: updatedParts });
+      }
+    } else {
+      if (quickCounter.targetStitches > 0 && quickCounter.currentStitch >= quickCounter.targetStitches) {
+        if (settings.autoAdvanceRound) {
+          handleOverlayIncrementRound();
+        }
+        return;
+      }
+      const nextStitch = quickCounter.currentStitch + 1;
+      if (
+        settings.autoAdvanceRound &&
+        quickCounter.targetStitches > 0 &&
+        nextStitch >= quickCounter.targetStitches
+      ) {
+        handleOverlayIncrementRound();
+      } else {
+        const capped = quickCounter.targetStitches > 0
+          ? Math.min(nextStitch, quickCounter.targetStitches)
+          : nextStitch;
+        const updatedHistory = {
+          ...(quickCounter.roundHistory || {}),
+          [quickCounter.currentRound]: capped,
+        };
+        handleUpdateQuickCounter({
+          ...quickCounter,
+          currentStitch: capped,
+          roundHistory: updatedHistory,
+        });
+      }
+    }
+  };
+
+  const handleOverlayDecrementStitch = () => {
+    if (currentProject && currentProjectActivePart) {
+      if (currentProjectActivePart.currentStitch <= 0) return;
+      const updatedParts = currentProject.parts.map((p) =>
+        p.id === currentProjectActivePart.id
+          ? { ...p, currentStitch: currentProjectActivePart.currentStitch - 1 }
+          : p
+      );
+      handleUpdateProject({ ...currentProject, parts: updatedParts });
+    } else {
+      if (quickCounter.currentStitch <= 0) return;
+      const nextStitch = quickCounter.currentStitch - 1;
+      const updatedHistory = {
+        ...(quickCounter.roundHistory || {}),
+        [quickCounter.currentRound]: nextStitch,
+      };
+      handleUpdateQuickCounter({
+        ...quickCounter,
+        currentStitch: nextStitch,
+        roundHistory: updatedHistory,
+      });
+    }
+  };
+
+  const handleOverlayResetStitches = () => {
+    if (currentProject && currentProjectActivePart) {
+      const updatedParts = currentProject.parts.map((p) =>
+        p.id === currentProjectActivePart.id ? { ...p, currentStitch: 0 } : p
+      );
+      handleUpdateProject({ ...currentProject, parts: updatedParts });
+    } else {
+      const updatedHistory = {
+        ...(quickCounter.roundHistory || {}),
+        [quickCounter.currentRound]: 0,
+      };
+      handleUpdateQuickCounter({
+        ...quickCounter,
+        currentStitch: 0,
+        roundHistory: updatedHistory,
+      });
+    }
+  };
+
+  const handleOverlaySetTargetStitches = (num: number) => {
+    if (currentProject && currentProjectActivePart) {
+      const updatedParts = currentProject.parts.map((p) =>
+        p.id === currentProjectActivePart.id ? { ...p, targetStitches: num } : p
+      );
+      handleUpdateProject({ ...currentProject, parts: updatedParts });
+    } else {
+      const updatedTargets = {
+        ...(quickCounter.roundTargets || {}),
+        [quickCounter.currentRound]: num,
+      };
+      handleUpdateQuickCounter({
+        ...quickCounter,
+        targetStitches: num,
+        roundTargets: updatedTargets,
+      });
+    }
+  };
+
+  const handleOverlaySelectPart = (partId: string) => {
+    if (currentProject) {
+      handleUpdateProject({ ...currentProject, activePartId: partId });
+    }
+  };
+
   // Switch project or switch to free counter
   const handleSelectProject = (id: string) => {
     setActiveProjectId(id);
     StorageService.setActiveProjectId(id);
+    setActiveScreen('counter');
   };
 
   const handleSelectFreeCounter = () => {
     setActiveProjectId('free');
     StorageService.setActiveProjectId('free');
+    setActiveScreen('counter');
   };
 
   // Reload projects from storage
@@ -274,27 +496,64 @@ export default function App() {
       {/* Header: Clean, airy, spacious on both mobile and PC (no crowding!) */}
       <header className="sticky top-0 z-30 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-[#D8CABE] dark:border-stone-800 px-3.5 sm:px-6 py-2 transition-colors shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
-          {/* Left: Compact brand logo + title + project chip */}
+          {/* Left: Compact brand logo + title + screen indicator */}
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-[#8C5E47] flex items-center justify-center text-white text-base shadow-xs shrink-0">
-              <span>🧶</span>
-            </div>
-            <div className="flex items-center gap-1.5 min-w-0">
-              <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-[#2D2824] dark:text-stone-50 font-comfortaa leading-none shrink-0">
-                AmiContador
-              </h1>
+            <button
+              onClick={() => setActiveScreen('home')}
+              className="flex items-center gap-2 text-left cursor-pointer group"
+              title="Ir para o Menu Principal"
+            >
+              <div className="w-8 h-8 rounded-xl bg-[#8C5E47] group-hover:bg-[#724A36] flex items-center justify-center text-white text-base shadow-xs shrink-0 transition-colors">
+                <span>🧶</span>
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-[#2D2824] dark:text-stone-50 font-comfortaa leading-none shrink-0">
+                  AmiContador
+                </h1>
+              </div>
+            </button>
+
+            {/* Quick Switcher / Current Mode Pill */}
+            <div className="flex items-center gap-1 ml-0.5 sm:ml-1">
               <button
-                onClick={() => setIsProjectsOpen(true)}
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors truncate max-w-[110px] sm:max-w-[180px] cursor-pointer"
-                title="Trocar projeto ou modo livre"
+                onClick={() => setActiveScreen(activeScreen === 'home' ? 'counter' : 'home')}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
+                  activeScreen === 'home'
+                    ? 'bg-[#8C5E47] text-white'
+                    : 'bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1]'
+                }`}
+                title="Alternar entre Menu Principal e Contador"
               >
-                {currentProject ? currentProject.title : 'Livre'} ▼
+                {activeScreen === 'home' ? 'Menu' : (currentProject ? currentProject.title : 'Contador')}
               </button>
+
+              {activeScreen === 'counter' && (
+                <button
+                  onClick={() => setIsProjectsOpen(true)}
+                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors cursor-pointer"
+                  title="Trocar projeto"
+                >
+                  ▼
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Right: Quick Dark/Light Theme Toggle + Projetos + Ajustes */}
+          {/* Right: Quick Tools + PWA Install + Theme Toggle + Projetos + Ajustes */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Quick Pricing Calculator Button in Header */}
+            <button
+              onClick={() => setIsPricingOpen(true)}
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-[#FFF6EE] dark:bg-stone-800 border border-[#F4A261] dark:border-stone-700 text-[#C85A32] dark:text-[#F4A261] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Abrir Calculadora de Preço"
+            >
+              <Calculator className="w-4 h-4" />
+              <span className="hidden md:inline">Calculadora</span>
+            </button>
+
+            {/* PWA Install Button in Header */}
+            <PWAInstallButton variant="button" />
+
             <button
               onClick={() => {
                 const nextTheme = settings.theme === 'dark-crochet' ? 'warm-yarn' : 'dark-crochet';
@@ -308,12 +567,12 @@ export default function App() {
               {settings.theme === 'dark-crochet' ? (
                 <>
                   <Sun className="w-4 h-4 text-amber-400" />
-                  <span className="hidden md:inline">Claro</span>
+                  <span className="hidden lg:inline">Claro</span>
                 </>
               ) : (
                 <>
                   <Moon className="w-4 h-4 text-[#8C5E47]" />
-                  <span className="hidden md:inline">Escuro</span>
+                  <span className="hidden lg:inline">Escuro</span>
                 </>
               )}
             </button>
@@ -359,10 +618,24 @@ export default function App() {
           </div>
         )}
 
-        {isSplitMode ? (
-          /* Split Screen: PDF on left, Counter on right */
-          <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-56px)] overflow-hidden">
-            <div className="w-full md:w-1/2 h-1/2 md:h-full">
+        {activeScreen === 'home' ? (
+          /* Main Menu Hub: Prominent buttons for Stitch Counter and Pricing Calculator */
+          <div className="flex-1 w-full flex flex-col justify-start pb-16 sm:pb-8">
+            <HomeHubView
+              currentProject={currentProject}
+              quickCounter={quickCounter}
+              onNavigateToCounter={() => setActiveScreen('counter')}
+              onOpenCalculator={() => setIsPricingOpen(true)}
+              onOpenDictionary={() => setIsDictionaryOpen(true)}
+              onOpenYarnStash={() => setIsYarnStashOpen(true)}
+              onOpenPdf={() => setIsPdfOpen(true)}
+              onOpenProjectsList={() => setIsProjectsOpen(true)}
+            />
+          </div>
+        ) : isSplitMode ? (
+          /* Split / Overlay Screen: Mobile = Fullscreen PDF with Floating Counter Overlay; Desktop = Side-by-side */
+          <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-56px)] overflow-hidden relative pb-16 sm:pb-0">
+            <div className="w-full md:w-1/2 h-full border-b md:border-b-0 md:border-r border-[#D6C8B8] dark:border-stone-800 relative">
               <PdfViewerModal
                 isOpen={false}
                 isSplitMode={true}
@@ -374,9 +647,34 @@ export default function App() {
                     handleUpdateProject(up);
                   }
                 }}
+                onCreateProjectFromPdf={handleCreateProjectFromPdf}
               />
+
+              {/* Floating Counter Overlay on Mobile */}
+              <div className="md:hidden">
+                <FloatingCounterOverlay
+                  title={currentProject ? currentProject.title : 'Contador Livre'}
+                  activePart={currentProjectActivePart || undefined}
+                  parts={currentProject?.parts}
+                  currentRound={currentProjectActivePart ? currentProjectActivePart.currentRound : quickCounter.currentRound}
+                  targetRounds={currentProjectActivePart ? currentProjectActivePart.targetRounds : quickCounter.targetRounds}
+                  currentStitch={currentProjectActivePart ? currentProjectActivePart.currentStitch : quickCounter.currentStitch}
+                  targetStitches={currentProjectActivePart ? currentProjectActivePart.targetStitches : quickCounter.targetStitches}
+                  settings={settings}
+                  onIncrementRound={handleOverlayIncrementRound}
+                  onDecrementRound={handleOverlayDecrementRound}
+                  onIncrementStitch={handleOverlayIncrementStitch}
+                  onDecrementStitch={handleOverlayDecrementStitch}
+                  onResetStitches={handleOverlayResetStitches}
+                  onSetTargetStitches={handleOverlaySetTargetStitches}
+                  onSelectPart={handleOverlaySelectPart}
+                  onClose={() => setIsSplitMode(false)}
+                />
+              </div>
             </div>
-            <div className="w-full md:w-1/2 h-1/2 md:h-full overflow-y-auto p-3 sm:p-6 bg-amigurumi-canvas dark:bg-stone-950">
+
+            {/* Desktop Side-by-Side Right Column */}
+            <div className="hidden md:block w-1/2 h-full overflow-y-auto p-3 sm:p-6 bg-amigurumi-canvas dark:bg-stone-950">
               {currentProject ? (
                 <CounterView
                   project={currentProject}
@@ -403,7 +701,7 @@ export default function App() {
           </div>
         ) : (
           /* Standard Single Column View - Compact padding on mobile so button is high up */
-          <div className="max-w-xl w-full mx-auto px-3 py-2 sm:p-6">
+          <div className="max-w-xl w-full mx-auto px-3 py-2 sm:p-6 pb-20 sm:pb-8">
             {currentProject ? (
               <CounterView
                 project={currentProject}
@@ -430,9 +728,60 @@ export default function App() {
         )}
       </main>
 
+      {/* Mobile / Tablet Bottom Navigation Bar (1-tap access to primary tools) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-30 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border-t border-[#D8CABE] dark:border-stone-800 py-1.5 px-3 flex items-center justify-around sm:hidden shadow-lg">
+        <button
+          onClick={() => setActiveScreen('home')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-bold transition-colors cursor-pointer ${
+            activeScreen === 'home'
+              ? 'text-[#8C5E47] dark:text-amber-400 font-extrabold'
+              : 'text-stone-500 hover:text-stone-700 dark:text-stone-400'
+          }`}
+        >
+          <Home className="w-5 h-5" />
+          <span>Início</span>
+        </button>
+
+        <button
+          onClick={() => setActiveScreen('counter')}
+          className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-bold transition-colors cursor-pointer ${
+            activeScreen === 'counter'
+              ? 'text-[#8C5E47] dark:text-amber-400 font-extrabold'
+              : 'text-stone-500 hover:text-stone-700 dark:text-stone-400'
+          }`}
+        >
+          <Hash className="w-5 h-5" />
+          <span>Contador</span>
+        </button>
+
+        <button
+          onClick={() => setIsPricingOpen(true)}
+          className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-bold text-stone-500 hover:text-[#C85A32] dark:text-stone-400 cursor-pointer"
+        >
+          <Calculator className="w-5 h-5 text-[#C85A32]" />
+          <span>Calculadora</span>
+        </button>
+
+        <button
+          onClick={() => setIsDictionaryOpen(true)}
+          className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-bold text-stone-500 hover:text-stone-700 dark:text-stone-400 cursor-pointer"
+        >
+          <BookOpen className="w-5 h-5" />
+          <span>Dicionário</span>
+        </button>
+
+        <button
+          onClick={() => setIsYarnStashOpen(true)}
+          className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-[10px] font-bold text-stone-500 hover:text-emerald-600 dark:text-stone-400 cursor-pointer"
+        >
+          <Package className="w-5 h-5" />
+          <span>Armarinho</span>
+        </button>
+      </nav>
+
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-[#2D2824] text-white text-xs font-bold shadow-2xl flex items-center gap-2 border border-stone-700 animate-slide-up">
+        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-[#2D2824] text-white text-xs font-bold shadow-2xl flex items-center gap-2 border border-stone-700 animate-slide-up">
           <Check className="w-4 h-4 text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
@@ -447,6 +796,9 @@ export default function App() {
         onOpenSync={() => setIsSyncOpen(true)}
         onOpenPdf={() => setIsPdfOpen(true)}
         onOpenSupabase={() => setIsSupabaseOpen(true)}
+        onOpenCalculator={() => setIsPricingOpen(true)}
+        onOpenDictionary={() => setIsDictionaryOpen(true)}
+        onOpenYarnStash={() => setIsYarnStashOpen(true)}
         isSplitMode={isSplitMode}
         onToggleSplitMode={() => setIsSplitMode(!isSplitMode)}
       />
@@ -466,6 +818,7 @@ export default function App() {
             handleUpdateProject(up);
           }
         }}
+        onCreateProjectFromPdf={handleCreateProjectFromPdf}
       />
 
       {/* Parts Modal (Project mode only) */}
@@ -532,6 +885,29 @@ export default function App() {
           partName={colorAlert.partName}
         />
       )}
+
+      {/* Pricing Calculator Modal */}
+      <PricingCalculatorModal
+        isOpen={isPricingOpen}
+        onClose={() => setIsPricingOpen(false)}
+        defaultTimeSeconds={currentProject?.totalTimeSeconds || quickCounter.totalTimeSeconds || 0}
+        defaultPieceName={currentProject ? currentProject.title : 'Meu Amigurumi'}
+        onShowToast={showToast}
+      />
+
+      {/* Crochet Terms Dictionary & Translator Modal */}
+      <CrochetDictionaryModal
+        isOpen={isDictionaryOpen}
+        onClose={() => setIsDictionaryOpen(false)}
+        onShowToast={showToast}
+      />
+
+      {/* Yarn Stash Inventory Modal */}
+      <YarnStashModal
+        isOpen={isYarnStashOpen}
+        onClose={() => setIsYarnStashOpen(false)}
+        onShowToast={showToast}
+      />
     </div>
   );
 }
