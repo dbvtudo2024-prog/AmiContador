@@ -18,8 +18,11 @@ import {
   Target,
   Pencil,
   Check,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 import { ProjectStopwatch } from './ProjectStopwatch';
+import { speechService } from '../services/speech';
 
 interface CounterViewProps {
   project: AmigurumiProject;
@@ -55,6 +58,10 @@ export const CounterView: React.FC<CounterViewProps> = ({
     activePart && activePart.targetRounds > 0 ? String(activePart.targetRounds) : ''
   );
 
+  // Hands-free voice recognition state
+  const [isListening, setIsListening] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+
   useEffect(() => {
     if (activePart) {
       setTargetInputValue(activePart.targetRounds > 0 ? String(activePart.targetRounds) : '');
@@ -62,20 +69,21 @@ export const CounterView: React.FC<CounterViewProps> = ({
     }
   }, [activePart?.id]);
 
-  // Active color reminder for this round
-  const currentColorReminder = activePart?.colorReminders?.find(
-    (r) => r.round === activePart.currentRound
-  );
+  // Active color reminder for this round:
+  // Only triggers for real color changes mid-piece (round > 1), NEVER on round 1 (which is just the starting color)
+  const currentColorReminder =
+    activePart?.colorReminders?.find((r) => r.round === activePart.currentRound && r.round > 1) || null;
 
-  // Next upcoming color reminder
+  // Next upcoming color reminder (only true color changes where round > 1)
   const nextColorReminder = activePart?.colorReminders
-    ?.filter((r) => r.round > (activePart.currentRound || 1))
+    ?.filter((r) => r.round > Math.max(1, activePart.currentRound || 1))
     ?.sort((a, b) => a.round - b.round)[0];
 
   // Check if we just landed on a color change round to notify
   const checkColorAlert = useCallback(
     (roundNum: number, part: ProjectPart) => {
-      const match = part.colorReminders?.find((r) => r.round === roundNum);
+      if (roundNum <= 1) return; // Never alert on round 1!
+      const match = part.colorReminders?.find((r) => r.round === roundNum && r.round > 1);
       if (match) {
         soundEffects.playColorChangeAlert(settings.soundEnabled, settings.soundVolume);
         soundEffects.vibrate([100, 50, 100], settings.vibrationEnabled);
@@ -248,6 +256,46 @@ export const CounterView: React.FC<CounterViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleIncrementRound, handleDecrementRound, handleIncrementStitch, handleDecrementStitch]);
 
+  // Hands-free voice recognition toggle
+  const toggleVoiceControl = useCallback(() => {
+    if (!speechService.isSupported()) {
+      alert('Seu navegador não possui suporte ao microfone para reconhecimento de voz.');
+      return;
+    }
+    if (isListening) {
+      speechService.stop();
+      setIsListening(false);
+      setVoiceFeedback(null);
+    } else {
+      speechService.start({
+        onCommand: (command, transcript) => {
+          if (command === 'stitch_inc') {
+            handleIncrementStitch();
+            setVoiceFeedback(`+1 ponto ("${transcript}")`);
+          } else if (command === 'stitch_dec') {
+            handleDecrementStitch();
+            setVoiceFeedback(`-1 ponto ("${transcript}")`);
+          } else if (command === 'round_inc') {
+            handleIncrementRound();
+            setVoiceFeedback(`+1 volta ("${transcript}")`);
+          }
+          setTimeout(() => setVoiceFeedback(null), 2500);
+        },
+        onStatusChange: (listening) => {
+          setIsListening(listening);
+        },
+        onError: () => {},
+      });
+      setIsListening(true);
+    }
+  }, [isListening, handleIncrementStitch, handleDecrementStitch, handleIncrementRound]);
+
+  useEffect(() => {
+    return () => {
+      speechService.stop();
+    };
+  }, []);
+
   if (!activePart) {
     return (
       <div className="p-8 text-center text-stone-500 font-medium">
@@ -262,15 +310,60 @@ export const CounterView: React.FC<CounterViewProps> = ({
 
   return (
     <div className="w-full max-w-xl mx-auto space-y-2.5 sm:space-y-3.5 pb-16">
-      {/* 0. Project Stopwatch Timer */}
-      <ProjectStopwatch
-        totalSeconds={project.totalTimeSeconds || 0}
-        isRunning={project.isTimerRunning}
-        onUpdateSeconds={(sec) => onUpdateProject({ ...project, totalTimeSeconds: sec })}
-        onToggleRunning={(running) => onUpdateProject({ ...project, isTimerRunning: running })}
-        soundEnabled={settings.soundEnabled}
-        vibrationEnabled={settings.vibrationEnabled}
-      />
+      {/* 0. Project Stopwatch Timer & Voice Control Bar */}
+      <div className="space-y-2">
+        <ProjectStopwatch
+          totalSeconds={project.totalTimeSeconds || 0}
+          isRunning={project.isTimerRunning}
+          onUpdateSeconds={(sec) => onUpdateProject({ ...project, totalTimeSeconds: sec })}
+          onToggleRunning={(running) => onUpdateProject({ ...project, isTimerRunning: running })}
+          soundEnabled={settings.soundEnabled}
+          vibrationEnabled={settings.vibrationEnabled}
+        />
+
+        {/* Voice Control Toggle & Status */}
+        <div className="flex items-center justify-between px-1">
+          <button
+            onClick={toggleVoiceControl}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
+              isListening
+                ? 'bg-rose-500 text-white border-rose-600 animate-pulse'
+                : 'bg-[#FAF5ED] hover:bg-[#F2ECE1] dark:bg-stone-800 text-[#2D2824] dark:text-stone-100 border-[#D6C8B8] dark:border-stone-700'
+            }`}
+            title={
+              isListening
+                ? 'Comando de voz ativo! Fale: "ponto", "menos" ou "volta"'
+                : 'Ativar controle por voz sem as mãos (fale "ponto" ou "volta")'
+            }
+          >
+            {isListening ? (
+              <Mic className="w-3.5 h-3.5 text-white" />
+            ) : (
+              <MicOff className="w-3.5 h-3.5 text-[#8C5E47] dark:text-stone-300" />
+            )}
+            <span>{isListening ? 'Ouvindo comandos de voz...' : 'Comando por Voz'}</span>
+          </button>
+        </div>
+
+        {/* Voice Feedback Alert */}
+        {isListening && (
+          <div className="px-3.5 py-2 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between shadow-xs animate-fade-in">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+              <span className="font-bold truncate">
+                {voiceFeedback ? `Comando: ${voiceFeedback}` : 'Mãos livres ativo: fale "ponto", "menos" ou "volta"'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleVoiceControl}
+              className="text-[10px] font-bold text-rose-700 dark:text-rose-300 underline cursor-pointer ml-2 shrink-0"
+            >
+              Desativar
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* 1. Part Selector Pills */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none px-0.5">
@@ -466,8 +559,8 @@ export const CounterView: React.FC<CounterViewProps> = ({
         </div>
       ) : null}
 
-      {/* 4. Main Amigurumi Counter Card */}
-      <div className="stitched-card p-4 sm:p-6 rounded-3xl shadow-md space-y-4 relative overflow-hidden">
+      {/* 4. Main Amigurumi Counter Card - Sticky so buttons never disappear on scroll */}
+      <div className="stitched-card p-4 sm:p-5 rounded-3xl shadow-md space-y-3.5 relative overflow-hidden sticky top-0 z-10 bg-[#FAF5ED] dark:bg-stone-900 border border-[#D6C8B8] dark:border-stone-700">
         {/* Top bar inside counter */}
         <div className="flex items-center justify-between gap-2 border-b border-[#EAE0D2] dark:border-stone-700/60 pb-2.5">
           <button

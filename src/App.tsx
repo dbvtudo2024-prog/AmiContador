@@ -199,6 +199,7 @@ export default function App() {
     StorageService.setActiveProjectId(saved.id);
     setIsPdfOpen(false);
     setIsSplitMode(true);
+    setActiveScreen('counter');
     showToast(`🎉 Projeto "${saved.title}" criado com ${saved.parts.length} peças!`);
   };
 
@@ -492,11 +493,11 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col transition-colors duration-200 ${getThemeClass()}`}>
+    <div className={`${isSplitMode ? 'h-screen overflow-hidden' : 'min-h-screen'} flex flex-col transition-colors duration-200 ${getThemeClass()}`}>
       {/* Header: Clean, airy, spacious on both mobile and PC (no crowding!) */}
-      <header className="sticky top-0 z-30 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-[#D8CABE] dark:border-stone-800 px-3.5 sm:px-6 py-2 transition-colors shadow-xs">
+      <header className="shrink-0 z-30 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border-b border-[#D8CABE] dark:border-stone-800 px-3.5 sm:px-6 py-2 transition-colors shadow-xs h-14">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-2">
-          {/* Left: Compact brand logo + title + screen indicator */}
+          {/* Left: Brand logo + title */}
           <div className="flex items-center gap-2 min-w-0">
             <button
               onClick={() => setActiveScreen('home')}
@@ -506,54 +507,25 @@ export default function App() {
               <div className="w-8 h-8 rounded-xl bg-[#8C5E47] group-hover:bg-[#724A36] flex items-center justify-center text-white text-base shadow-xs shrink-0 transition-colors">
                 <span>🧶</span>
               </div>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-[#2D2824] dark:text-stone-50 font-comfortaa leading-none shrink-0">
-                  AmiContador
-                </h1>
-              </div>
+              <h1 className="text-base sm:text-lg font-extrabold tracking-tight text-[#2D2824] dark:text-stone-50 font-comfortaa leading-none shrink-0">
+                AmiContador
+              </h1>
             </button>
 
-            {/* Quick Switcher / Current Mode Pill */}
-            <div className="flex items-center gap-1 ml-0.5 sm:ml-1">
+            {/* In counter mode: show project chip */}
+            {activeScreen === 'counter' && (
               <button
-                onClick={() => setActiveScreen(activeScreen === 'home' ? 'counter' : 'home')}
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-colors cursor-pointer ${
-                  activeScreen === 'home'
-                    ? 'bg-[#8C5E47] text-white'
-                    : 'bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1]'
-                }`}
-                title="Alternar entre Menu Principal e Contador"
+                onClick={() => setIsProjectsOpen(true)}
+                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors truncate max-w-[100px] sm:max-w-[180px] cursor-pointer ml-1"
+                title="Trocar projeto ou modo livre"
               >
-                {activeScreen === 'home' ? 'Menu' : (currentProject ? currentProject.title : 'Contador')}
+                {currentProject ? currentProject.title : 'Livre'} ▼
               </button>
-
-              {activeScreen === 'counter' && (
-                <button
-                  onClick={() => setIsProjectsOpen(true)}
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors cursor-pointer"
-                  title="Trocar projeto"
-                >
-                  ▼
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
-          {/* Right: Quick Tools + PWA Install + Theme Toggle + Projetos + Ajustes */}
+          {/* Right: Theme Toggle + Projetos + Ajustes (Clean, uncluttered!) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* Quick Pricing Calculator Button in Header */}
-            <button
-              onClick={() => setIsPricingOpen(true)}
-              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-[#FFF6EE] dark:bg-stone-800 border border-[#F4A261] dark:border-stone-700 text-[#C85A32] dark:text-[#F4A261] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
-              title="Abrir Calculadora de Preço"
-            >
-              <Calculator className="w-4 h-4" />
-              <span className="hidden md:inline">Calculadora</span>
-            </button>
-
-            {/* PWA Install Button in Header */}
-            <PWAInstallButton variant="button" />
-
             <button
               onClick={() => {
                 const nextTheme = settings.theme === 'dark-crochet' ? 'warm-yarn' : 'dark-crochet';
@@ -567,12 +539,12 @@ export default function App() {
               {settings.theme === 'dark-crochet' ? (
                 <>
                   <Sun className="w-4 h-4 text-amber-400" />
-                  <span className="hidden lg:inline">Claro</span>
+                  <span className="hidden md:inline">Claro</span>
                 </>
               ) : (
                 <>
                   <Moon className="w-4 h-4 text-[#8C5E47]" />
-                  <span className="hidden lg:inline">Escuro</span>
+                  <span className="hidden md:inline">Escuro</span>
                 </>
               )}
             </button>
@@ -599,9 +571,9 @@ export default function App() {
       </header>
 
       {/* Main Container - Supports Split View on PC */}
-      <main className="flex-1 w-full mx-auto flex flex-col justify-start">
-        {/* Screen wake lock notice if active */}
-        {settings.keepAwake && (
+      <main className={`flex-1 w-full mx-auto flex flex-col justify-start ${isSplitMode ? 'h-[calc(100vh-56px)] overflow-hidden' : ''}`}>
+        {/* Screen wake lock notice if active (hidden in split mode to preserve exact 100vh lock) */}
+        {settings.keepAwake && !isSplitMode && (
           <div className="max-w-xl mx-auto w-full px-3 pt-2">
             <div className="px-3 py-1.5 rounded-2xl bg-[#FFF6EE] dark:bg-stone-900 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-300 text-xs flex items-center justify-between shadow-xs">
               <span className="flex items-center gap-1.5 font-medium text-[11px]">
@@ -633,9 +605,10 @@ export default function App() {
             />
           </div>
         ) : isSplitMode ? (
-          /* Split / Overlay Screen: Mobile = Fullscreen PDF with Floating Counter Overlay; Desktop = Side-by-side */
-          <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-56px)] overflow-hidden relative pb-16 sm:pb-0">
-            <div className="w-full md:w-1/2 h-full border-b md:border-b-0 md:border-r border-[#D6C8B8] dark:border-stone-800 relative">
+          /* Split View: PC = Two equal-sized frames side-by-side with internal scrolling; Mobile = Fullscreen PDF with Floating Pill */
+          <div className="flex-1 flex flex-col md:flex-row h-full overflow-hidden relative">
+            {/* Left: PDF Column - Same height & width as counter on PC, strictly internal scroll */}
+            <div className="w-full md:w-1/2 h-full flex flex-col overflow-hidden border-b md:border-b-0 md:border-r border-[#D6C8B8] dark:border-stone-800 relative bg-[#24211E]">
               <PdfViewerModal
                 isOpen={false}
                 isSplitMode={true}
@@ -673,30 +646,32 @@ export default function App() {
               </div>
             </div>
 
-            {/* Desktop Side-by-Side Right Column */}
-            <div className="hidden md:block w-1/2 h-full overflow-y-auto p-3 sm:p-6 bg-amigurumi-canvas dark:bg-stone-950">
-              {currentProject ? (
-                <CounterView
-                  project={currentProject}
-                  settings={settings}
-                  onUpdateProject={handleUpdateProject}
-                  onOpenColorModal={() => setIsColorsOpen(true)}
-                  onOpenPartsModal={() => setIsPartsOpen(true)}
-                  onOpenPdfModal={() => setIsPdfOpen(true)}
-                  onTriggerColorAlert={handleTriggerColorAlert}
-                />
-              ) : (
-                <FreeCounterView
-                  counter={quickCounter}
-                  settings={settings}
-                  onUpdateCounter={handleUpdateQuickCounter}
-                  onResetCounter={handleResetQuickCounter}
-                  onSaveAsProject={handleSaveFreeCounterAsProject}
-                  onOpenColorModal={() => setIsColorsOpen(true)}
-                  onOpenPdfModal={() => setIsPdfOpen(true)}
-                  onTriggerColorAlert={handleTriggerColorAlert}
-                />
-              )}
+            {/* Right: Counter Column - Same height as PDF, buttons always visible and accessible */}
+            <div className="hidden md:flex md:w-1/2 h-full flex-col overflow-y-auto p-3 sm:p-5 bg-amigurumi-canvas dark:bg-stone-950">
+              <div className="w-full max-w-xl mx-auto">
+                {currentProject ? (
+                  <CounterView
+                    project={currentProject}
+                    settings={settings}
+                    onUpdateProject={handleUpdateProject}
+                    onOpenColorModal={() => setIsColorsOpen(true)}
+                    onOpenPartsModal={() => setIsPartsOpen(true)}
+                    onOpenPdfModal={() => setIsPdfOpen(true)}
+                    onTriggerColorAlert={handleTriggerColorAlert}
+                  />
+                ) : (
+                  <FreeCounterView
+                    counter={quickCounter}
+                    settings={settings}
+                    onUpdateCounter={handleUpdateQuickCounter}
+                    onResetCounter={handleResetQuickCounter}
+                    onSaveAsProject={handleSaveFreeCounterAsProject}
+                    onOpenColorModal={() => setIsColorsOpen(true)}
+                    onOpenPdfModal={() => setIsPdfOpen(true)}
+                    onTriggerColorAlert={handleTriggerColorAlert}
+                  />
+                )}
+              </div>
             </div>
           </div>
         ) : (
@@ -811,11 +786,14 @@ export default function App() {
         onToggleSplitMode={() => {
           setIsSplitMode(true);
           setIsPdfOpen(false);
+          setActiveScreen('counter');
         }}
         project={pdfProjectFallback}
         onUpdateProject={(up) => {
           if (currentProject) {
             handleUpdateProject(up);
+          } else {
+            handleCreateProjectFromPdf(up);
           }
         }}
         onCreateProjectFromPdf={handleCreateProjectFromPdf}

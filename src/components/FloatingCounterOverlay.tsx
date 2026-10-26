@@ -70,6 +70,8 @@ export const FloatingCounterOverlay: React.FC<FloatingCounterOverlayProps> = ({
   };
 
   const handleIncRound = () => {
+    soundEffects.playRoundChime(settings.soundEnabled, settings.soundVolume);
+    soundEffects.vibrate(50, settings.vibrationEnabled);
     onIncrementRound();
   };
 
@@ -92,27 +94,39 @@ export const FloatingCounterOverlay: React.FC<FloatingCounterOverlayProps> = ({
     onSelectPart(parts[currentPartIndex + 1].id);
   };
 
-  // Minimized Pill Mode (unobtrusive floating badge at bottom-right)
+  // Minimized Pill Mode (unobtrusive floating badge at bottom-right, clear of mobile bottom bar)
   if (isMinimized) {
     return (
-      <div className="fixed bottom-3 right-3 z-40 flex items-center gap-1.5 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border border-[#D6C8B8] dark:border-stone-700 shadow-2xl rounded-full p-1.5 pl-3 text-xs animate-slide-up">
+      <div className="fixed bottom-16 sm:bottom-4 right-3 sm:right-4 z-40 flex items-center gap-1.5 bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md border border-[#D6C8B8] dark:border-stone-700 shadow-2xl rounded-full p-1.5 pl-3 text-xs animate-slide-up">
+        {/* Tap info to expand */}
         <button
           onClick={() => setIsMinimized(false)}
-          className="flex items-center gap-1.5 font-bold text-[#2D2824] dark:text-stone-100 cursor-pointer"
-          title="Expandir contador flutuante"
+          className="flex items-center gap-1.5 font-bold text-[#2D2824] dark:text-stone-100 cursor-pointer pr-1"
+          title="Toque para expandir detalhes do contador"
         >
           <span className="text-sm">🧶</span>
-          <span className="font-mono-numbers">
+          <span className="font-mono-numbers text-xs">
             V.{currentRound} • {currentStitch}
             {targetStitches > 0 ? `/${targetStitches}` : ''} pts
           </span>
-          <ChevronUp className="w-4 h-4 text-stone-500" />
+          <ChevronUp className="w-3.5 h-3.5 text-stone-400" />
         </button>
 
+        {/* Passar Volta Button */}
+        <button
+          onClick={handleIncRound}
+          className="px-2.5 py-1.5 rounded-full font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-xs bg-[#C85A32] hover:bg-[#B24822] text-white active:scale-95 shrink-0"
+          title="Avançar para a próxima volta (+1 Volta)"
+        >
+          <RotateCcw className="w-3 h-3 stroke-[2.5]" />
+          <span>+1 Volta</span>
+        </button>
+
+        {/* Passar Ponto Button */}
         <button
           onClick={handleIncStitch}
           disabled={isStitchComplete && !settings.autoAdvanceRound}
-          className={`w-8 h-8 rounded-full font-bold flex items-center justify-center transition-all cursor-pointer shadow-xs ${
+          className={`w-8 h-8 rounded-full font-bold flex items-center justify-center transition-all cursor-pointer shadow-xs shrink-0 ${
             isStitchComplete && !settings.autoAdvanceRound
               ? 'bg-stone-300 dark:bg-stone-700 text-stone-400 cursor-not-allowed'
               : 'bg-[#8C5E47] hover:bg-[#724A36] text-white active:scale-95'
@@ -127,7 +141,7 @@ export const FloatingCounterOverlay: React.FC<FloatingCounterOverlayProps> = ({
 
   // Expanded Floating Card Mode
   return (
-    <div className="fixed bottom-3 inset-x-3 sm:inset-x-auto sm:right-4 sm:w-96 z-40 mx-auto bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md rounded-3xl border-2 border-[#D6C8B8] dark:border-stone-700 shadow-2xl p-3 space-y-2.5 animate-slide-up">
+    <div className="fixed bottom-16 sm:bottom-4 inset-x-3 sm:inset-x-auto sm:right-4 sm:w-96 z-40 mx-auto bg-[#FAF5ED]/95 dark:bg-stone-900/95 backdrop-blur-md rounded-3xl border-2 border-[#D6C8B8] dark:border-stone-700 shadow-2xl p-3 space-y-2.5 animate-slide-up">
       {/* Top Bar: Title & Min/Close controls */}
       <div className="flex items-center justify-between border-b border-[#EAE0D2] dark:border-stone-800 pb-2">
         <div className="flex items-center gap-1.5 min-w-0">

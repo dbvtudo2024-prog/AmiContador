@@ -32,8 +32,75 @@ export function sanitizePatternTitle(fileName: string): string {
     .join(' ');
 }
 
+// Comprehensive amigurumi yarn colors list
+const KNOWN_COLORS = [
+  'bege', 'branco', 'branca', 'preto', 'preta', 'vermelho', 'vermelha',
+  'amarelo', 'amarela', 'verde', 'azul', 'rosa', 'marrom', 'cinza',
+  'laranja', 'roxo', 'roxa', 'lilás', 'lilas', 'mostarda', 'caramelo',
+  'castanho', 'castanha', 'pele', 'cru', 'crú', 'off white', 'off-white',
+  'salmão', 'salmao', 'turquesa', 'vinho', 'bordô', 'bordo', 'dourado',
+  'prateado', 'menta', 'hortelã', 'hortela', 'coral', 'chocolate',
+  'brigadeiro', 'solar', 'chantily', 'chantilly', 'quartzo', 'terracota',
+  'rubi', 'safira', 'esmeralda', 'violeta', 'amêndoa', 'amendoa', 'canela',
+  'ferrugem', 'petróleo', 'petroleo', 'jeans', 'lavanda', 'cereja', 'melancia',
+  'red', 'blue', 'green', 'yellow', 'black', 'white', 'brown', 'beige', 'pink',
+  'rojo', 'blanco', 'negro', 'amarillo'
+];
+
+export function isColorOnlyText(text: string): boolean {
+  const clean = text
+    .toLowerCase()
+    .trim()
+    .replace(/^[:*#•\-–—]+\s*/, '')
+    .replace(/[:*#•\-–—]+$/, '')
+    .trim();
+
+  if (!clean || clean.length > 35) return false;
+
+  const withoutPrefix = clean
+    .replace(/^(?:fio|linha|cor|lã|trocar para|mudar para|iniciar com|começar com|usar|com|em)\s+(?:de\s+)?(?:fio\s+)?/i, '')
+    .trim();
+
+  for (const c of KNOWN_COLORS) {
+    if (
+      clean === c ||
+      withoutPrefix === c ||
+      withoutPrefix.startsWith(c + ' ') ||
+      withoutPrefix.endsWith(' ' + c)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function getColorHex(colorName: string): string {
+  const clean = colorName.toLowerCase();
+  if (clean.includes('vermelh') || clean.includes('red') || clean.includes('rubi')) return '#C83232';
+  if (clean.includes('amarel') || clean.includes('yellow') || clean.includes('mostarda')) return '#E5A823';
+  if (clean.includes('verd') || clean.includes('green') || clean.includes('menta')) return '#3D8C40';
+  if (clean.includes('bege') || clean.includes('pele') || clean.includes('cru')) return '#D4B996';
+  if (clean.includes('branc') || clean.includes('white') || clean.includes('off')) return '#E2DCD5';
+  if (clean.includes('pret') || clean.includes('black')) return '#222222';
+  if (clean.includes('azul') || clean.includes('blue') || clean.includes('turquesa')) return '#3278C8';
+  if (clean.includes('rosa') || clean.includes('pink') || clean.includes('coral')) return '#E06D95';
+  if (clean.includes('laranj') || clean.includes('orange')) return '#D96B27';
+  if (clean.includes('marrom') || clean.includes('brown') || clean.includes('chocolate')) return '#784421';
+  if (clean.includes('rox') || clean.includes('lil') || clean.includes('violeta')) return '#844FA7';
+  return '#C85A32';
+}
+
+function normalizeStr(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
 export const PatternParserService = {
-  // Extract text from an uploaded PDF file preserving line breaks (\n) via Y-coordinates and hasEOL
+  // Extract text from an uploaded PDF file with TWO-COLUMN awareness
   async extractTextFromPdf(file: File | Blob): Promise<string> {
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -47,41 +114,122 @@ export const PatternParserService = {
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale: 1.0 });
         const textContent = await page.getTextContent();
-        let pageText = '';
-        let lastY: number | null = null;
-        let lastX: number | null = null;
+        const pageWidth = viewport.width;
 
+        interface ItemBox {
+          str: string;
+          x: number;
+          y: number; // PDF coordinates: Y=0 is bottom, top is pageHeight
+          width: number;
+          height: number;
+        }
+
+        const items: ItemBox[] = [];
         for (const rawItem of textContent.items) {
           const item = rawItem as any;
           if (!item.str && !item.hasEOL) continue;
+          const x = item.transform ? item.transform[4] : 0;
+          const y = item.transform ? item.transform[5] : 0;
+          const width = item.width || 0;
+          const height = item.height || 10;
+          if (item.str && item.str.trim()) {
+            items.push({ str: item.str, x, y, width, height });
+          }
+        }
 
-          const currentY = item.transform ? item.transform[5] : null;
-          const currentX = item.transform ? item.transform[4] : null;
+        // Helper: Format a list of items into lines sorted top-to-bottom (descending Y)
+        const formatItemsToLines = (list: ItemBox[]): string => {
+          if (list.length === 0) return '';
+          const sorted = [...list].sort((a, b) => b.y - a.y);
+          const linesArr: string[] = [];
+          let currentLineItems: ItemBox[] = [];
+          let currentLineY: number | null = null;
 
-          // If vertical position shifted by more than 3px, it's a new line!
-          if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 3) {
-            pageText += '\n';
-          } else if (item.hasEOL) {
-            pageText += '\n';
-          } else if (
-            lastX !== null &&
-            currentX !== null &&
-            currentX > lastX + 3 &&
-            !pageText.endsWith(' ') &&
-            !pageText.endsWith('\n')
-          ) {
-            pageText += ' ';
+          for (const it of sorted) {
+            if (currentLineY === null || Math.abs(it.y - currentLineY) <= 3.8) {
+              currentLineItems.push(it);
+              if (currentLineY === null) currentLineY = it.y;
+            } else {
+              currentLineItems.sort((a, b) => a.x - b.x);
+              let lineStr = '';
+              let lastX = 0;
+              for (const lineIt of currentLineItems) {
+                if (lineStr && lineIt.x > lastX + 2.5) {
+                  lineStr += ' ';
+                }
+                lineStr += lineIt.str;
+                lastX = lineIt.x + lineIt.width;
+              }
+              if (lineStr.trim()) linesArr.push(lineStr.trim());
+
+              currentLineItems = [it];
+              currentLineY = it.y;
+            }
           }
 
-          pageText += item.str || '';
-
-          if (item.hasEOL && !pageText.endsWith('\n')) {
-            pageText += '\n';
+          if (currentLineItems.length > 0) {
+            currentLineItems.sort((a, b) => a.x - b.x);
+            let lineStr = '';
+            let lastX = 0;
+            for (const lineIt of currentLineItems) {
+              if (lineStr && lineIt.x > lastX + 2.5) {
+                lineStr += ' ';
+              }
+              lineStr += lineIt.str;
+              lastX = lineIt.x + lineIt.width;
+            }
+            if (lineStr.trim()) linesArr.push(lineStr.trim());
           }
 
-          lastY = currentY;
-          lastX = currentX !== null ? currentX + (item.width || 0) : null;
+          return linesArr.join('\n');
+        };
+
+        // Detect if this page contains a 2-column layout
+        const midX = pageWidth * 0.5;
+        const leftItems = items.filter((it) => it.x < midX - 10);
+        const rightItems = items.filter((it) => it.x > midX - 10);
+
+        let pageText = '';
+
+        if (leftItems.length >= 4 && rightItems.length >= 4) {
+          const leftMinY = Math.min(...leftItems.map((it) => it.y));
+          const leftMaxY = Math.max(...leftItems.map((it) => it.y));
+          const rightMinY = Math.min(...rightItems.map((it) => it.y));
+          const rightMaxY = Math.max(...rightItems.map((it) => it.y));
+
+          const overlapTop = Math.min(leftMaxY, rightMaxY);
+          const overlapBottom = Math.max(leftMinY, rightMinY);
+          const overlapHeight = overlapTop - overlapBottom;
+
+          // If vertical overlap is significant, process as two columns!
+          if (overlapHeight > 60) {
+            // Header items: placed above both columns or spanning wide
+            const headerItems = items.filter(
+              (it) => it.y > overlapTop + 10 || (it.width > pageWidth * 0.45 && it.x < pageWidth * 0.3)
+            );
+            const columnZoneItems = items.filter(
+              (it) => !headerItems.includes(it) && it.y >= overlapBottom - 10
+            );
+            const footerItems = items.filter(
+              (it) => !headerItems.includes(it) && it.y < overlapBottom - 10
+            );
+
+            const col1 = columnZoneItems.filter((it) => it.x < midX);
+            const col2 = columnZoneItems.filter((it) => it.x >= midX);
+
+            const headerText = formatItemsToLines(headerItems);
+            const col1Text = formatItemsToLines(col1);
+            const col2Text = formatItemsToLines(col2);
+            const footerText = formatItemsToLines(footerItems);
+
+            pageText = [headerText, col1Text, col2Text, footerText].filter(Boolean).join('\n');
+          } else {
+            pageText = formatItemsToLines(items);
+          }
+        } else {
+          pageText = formatItemsToLines(items);
         }
 
         fullText += `\n--- PÁGINA ${pageNum} ---\n` + pageText + '\n';
@@ -96,11 +244,11 @@ export const PatternParserService = {
     }
   },
 
-  // Parse pattern text (from PDF or pasted text) into Title, Parts, Rounds, and Stitches
+  // Parse pattern text into Title, Parts, Rounds, and Stitches
   parseCrochetText(text: string, defaultFileName?: string): ExtractedPattern {
     const warnings: string[] = [];
 
-    // Pre-process: split into lines and also expand lines where multiple rounds were concatenated
+    // Pre-process: split into lines and expand multiple rounds on same line
     const rawLines = text
       .split(/\r?\n/)
       .map((l) => l.trim())
@@ -108,8 +256,6 @@ export const PatternParserService = {
 
     const lines: string[] = [];
     for (const rawLine of rawLines) {
-      // If a line contains multiple rounds (e.g. "1. 6 pb [6] 2. 6 aum [12]")
-      // Split on round prefixes
       const multiRoundSplit = rawLine.split(/(?<=[)\]\d])\s+(?=(?:(?:volta|carr|v|r)\s*)?[0-9]{1,3}\s*[:.)\-\ª\º\°]\s*)/i);
       if (multiRoundSplit.length > 1) {
         for (const sub of multiRoundSplit) {
@@ -138,86 +284,109 @@ export const PatternParserService = {
       }
     }
 
-    // Search for hook size: "agulha 2.75mm", "hook 2.5 mm", etc.
+    // Search for hook size
     const hookMatch = text.match(/(?:agulha|hook|crochet hook)[\s:]*([0-9.,]+)\s*(?:mm)?/i);
     if (hookMatch) {
       detectedHook = `${hookMatch[1].replace(',', '.')}mm`;
     }
 
-    // Search for yarn: "sugestão de fio: fio balloon amigo", "linha amigurumi", etc.
+    // Search for yarn
     const yarnMatch = text.match(/(?:sugestão de fio|fio|linha|yarn)[\s:]+([A-Za-zÀ-ÿ0-9\s]{3,35})/i);
     if (yarnMatch) {
       detectedYarn = yarnMatch[1].trim();
     }
 
+    // Regex 2: Round line prefix
+    // Matches: "1. 6 pb...", "1: 6 pb", "1 - 6 pb", "1ª carr: ...", "V1: ...", "Carr 1: ...", "Volta 1: ...", "5-6. pb ..."
+    const roundLineRegex = /^(?:[#*•-]+\s*)?(?:volta[s]?|carr(?:eira)?[s]?|v|r|rnd|round[s]?)?\s*([0-9]{1,3})(?:\s*(?:a|à|-|ao|até)\s*(?:volta[s]?|carr(?:eira)?[s]?|v|r|rnd|round[s]?)?\s*([0-9]{1,3}))?\s*[:.)\-\ª\º\°]\s*(.*)$/i;
+
+    // Stitch count regex: (6), [6], (12 pb), [18 pts], = 24, (30 sts), tot: 36
+    const stitchCountRegex = /(?:\(|\[|=|tot(?:al)?[:\s]*|-)\s*([0-9]{1,4})\s*(?:pb|pt[s]?|pontos|st[s]?|sc)?\s*(?:\)|\])?$/i;
+
+    // Color change inside round instruction
+    const colorChangeRegex = /(?:trocar|mudar|alterar|usar|com|iniciar com|mude para|troca de cor)\s+(?:o|a)?\s*(?:fio|cor|lã)?\s+([a-záàâãéèêíïóôõöúçñ\s]{3,30})/i;
+
+    // Smart piece header detector
+    // Smart piece header detector
+    function detectPieceTitle(line: string): { title: string; isPerna1?: boolean; isPerna2?: boolean; isCorpo?: boolean; isSectionHeader?: boolean } | null {
+      const clean = line.replace(/^[:*#•\-–—0-9.)]+\s*/, '').replace(/[:*#]/g, '').trim();
+      if (!clean || clean.length < 3 || clean.length > 55) return null;
+      if (isColorOnlyText(clean)) return null;
+      if (roundLineRegex.test(line)) return null;
+
+      const norm = normalizeStr(clean);
+
+      // Exclude stitch instructions, finishing details, and facial embroidery (NEVER create pieces for these!)
+      if (
+        /\b(anel magico|pb em toda|aum em toda|dim em toda|corte o fio|arremate|prenda o fio|saf em toda|bordar|borde|bordado|olhos?|nariz|focinho|boca|trava|seguranca|expressao|sobrancelha|cilios|costurar|costure)\b/.test(
+          norm
+        )
+      ) {
+        return null;
+      }
+
+      // Specific piece matchers
+      if (norm.includes('primeira perna') || norm.includes('perna 1') || norm.includes('pe e perna 1')) {
+        return { title: 'Primeira Perna', isPerna1: true };
+      }
+      if (norm.includes('segunda perna') || norm.includes('perna 2') || norm.includes('pe e perna 2')) {
+        return { title: 'Segunda Perna', isPerna2: true };
+      }
+      if (
+        norm.includes('uniao das pernas') ||
+        norm.includes('unindo as pernas') ||
+        norm.includes('juntando as pernas') ||
+        norm.includes('uniao de pernas') ||
+        norm === 'corpo' ||
+        norm.includes('corpo') ||
+        norm === 'body' ||
+        norm.includes('cuerpo')
+      ) {
+        return { title: 'Corpo', isCorpo: true };
+      }
+      if (norm.includes('braco') || norm.includes('arms') || norm.includes('brazo')) {
+        return { title: 'Braços (2x)' };
+      }
+      if (norm.includes('cabeca e corpo') || norm.includes('cabeca/corpo')) {
+        return { title: 'Cabeça e Corpo' };
+      }
+      if (norm.includes('cabeca') || norm === 'head' || norm.includes('cabeza')) {
+        return { title: 'Cabeça' };
+      }
+      if (norm.includes('vestido') || norm.includes('dress') || norm.includes('saia')) {
+        return { title: 'Vestido' };
+      }
+      if (norm.includes('avental') || norm.includes('apron')) {
+        return { title: 'Avental' };
+      }
+      if (norm.includes('cabelo') || norm.includes('hair') || norm.includes('peruca') || norm.includes('franja')) {
+        return { title: 'Cabelo' };
+      }
+      if (norm.includes('laco') || norm.includes('bow')) {
+        return { title: 'Laço' };
+      }
+      if (norm.includes('calcinha') || norm.includes('shorts') || norm.includes('cueca')) {
+        return { title: 'Calcinha' };
+      }
+      if (norm.includes('sapato') || norm.includes('shoe') || norm.includes('botinha') || norm.includes('meia')) {
+        return { title: 'Sapatos (2x)' };
+      }
+      if (norm.includes('orelha') || norm.includes('ear') || norm.includes('oreja')) {
+        return { title: 'Orelhas (2x)' };
+      }
+      if (norm === 'pes e pernas' || norm === 'pe e perna' || norm === 'pernas') {
+        return { title: 'Pés e Pernas', isSectionHeader: true };
+      }
+
+      return null;
+    }
+
     const detectedParts: ProjectPart[] = [];
     let currentPart: ProjectPart | null = null;
     let currentPartOrder = 1;
+    let currentSectionHeading = '';
+    let pendingColor: string | null = null;
 
-    // Comprehensive list of amigurumi piece keywords in PT, EN, ES
-    const pieceKeywords = [
-      'cabeça', 'cabeca', 'head', 'cabeza',
-      'corpo', 'body', 'cuerpo',
-      'braço', 'braços', 'braco', 'bracos', 'arm', 'arms', 'brazo', 'brazos',
-      'mão', 'mãos', 'mao', 'maos', 'hand', 'hands', 'mano', 'manos',
-      'perna', 'pernas', 'leg', 'legs', 'pierna', 'piernas',
-      'pé', 'pés', 'pe', 'pes', 'foot', 'feet', 'pie', 'pies',
-      'pata', 'patas', 'paw', 'paws',
-      'sapato', 'sapatos', 'sapatinho', 'sapatinhos', 'botinha', 'botinhas', 'shoe', 'shoes', 'zapato', 'zapatos',
-      'meia', 'meias', 'sock', 'socks',
-      'vestido', 'dress',
-      'avental', 'apron', 'delantal',
-      'saia', 'skirt', 'falda',
-      'calcinha', 'calcinhas', 'shorts', 'short', 'cueca', 'panties', 'underwear',
-      'blusa', 'casaco', 'jacket', 'shirt',
-      'manga', 'mangas', 'sleeve', 'sleeves',
-      'gola', 'collar',
-      'laço', 'laco', 'laçarote', 'bow', 'fita', 'ribbon',
-      'cabelo', 'cabelos', 'hair', 'pelo', 'cabello', 'peruca', 'wig', 'franja', 'mecha', 'mechas', 'coque',
-      'orelha', 'orelhas', 'ear', 'ears', 'oreja', 'orejas',
-      'focinho', 'muzzle', 'snout', 'hocico',
-      'nariz', 'narizinho', 'nose',
-      'olho', 'olhos', 'eye', 'eyes', 'ojo', 'ojos',
-      'bochecha', 'bochechas', 'cheek', 'cheeks',
-      'sobrancelha', 'sobrancelhas', 'eyebrow', 'eyebrows',
-      'boca', 'mouth', 'lábio', 'labio', 'lips',
-      'chifre', 'chifres', 'horn', 'horns',
-      'asa', 'asas', 'wing', 'wings', 'ala', 'alas',
-      'bico', 'beak', 'pico',
-      'cauda', 'rabo', 'rabinho', 'tail', 'cola',
-      'antena', 'antenas',
-      'juba', 'mane',
-      'tromba', 'trunk',
-      'barriga', 'belly',
-      'mancha', 'manchas', 'spot', 'spots',
-      'casco', 'shell',
-      'chapéu', 'chapeu', 'hat', 'gorro', 'boina', 'tiara', 'faixa',
-      'detalhe', 'detalhes', 'acessório', 'acessórios', 'acessorio', 'acessorios',
-      'babado', 'babados', 'ruffle',
-      'cabeça e corpo', 'cabeca e corpo', 'cabeça/corpo',
-      'peça', 'peca', 'parte', 'part', 'item'
-    ];
-
-    const partTermsPattern = pieceKeywords.join('|');
-
-    // Regex 1: Explicit piece headers (e.g. "CABEÇA:", "1. Cabeça (fazer 1)", "Pernas (2x)", "Vestido da Emília", "Cabelo:")
-    const explicitPartRegex = new RegExp(
-      `^(?:[#*•-]+\\s*)?(?:(?:peça|parte|item)\\s*[0-9]+[:.]\\s*)?(?:[0-9]{1,2}[.)\\-]\\s*)?(${partTermsPattern})(?:[\\s\\-_]+[a-záàâãéèêíïóôõöúçñ0-9]+)*(?:\\s*\\([^)]*\\)|\\s*\\[[^\\]]*\\])?[:\\-]?\\s*$`,
-      'i'
-    );
-
-    // Regex 2: Round line prefix
-    // Matches: "1. 6 pb...", "1: 6 pb", "1 - 6 pb", "1ª carr: ...", "1ª volta: ...", "V1: ...", "Carr 1: ...", "Volta 1: ...", "Voltas 5 a 8: ..."
-    const roundLineRegex = /^(?:[#*•-]+\s*)?(?:volta[s]?|carr(?:eira)?[s]?|v|r|rnd|round[s]?)?\s*([0-9]{1,3})(?:\s*(?:a|à|-|ao|até)\s*(?:volta[s]?|carr(?:eira)?[s]?|v|r|rnd|round[s]?)?\s*([0-9]{1,3}))?\s*[:.)\-\ª\º\°]\s*(.*)$/i;
-
-    // Stitch count regex:
-    // (6), [6], (12 pb), [18 pts], = 24, (30 sts), tot: 36, - 24 pb
-    const stitchCountRegex = /(?:\(|\[|=|tot(?:al)?[:\s]*|-)\s*([0-9]{1,4})\s*(?:pb|pt[s]?|pontos|st[s]?|sc)?\s*(?:\)|\])?$/i;
-
-    // Color change regex
-    const colorChangeRegex = /(?:trocar|mudar|alterar|usar|com|iniciar com|mude para|troca de cor)\s+(?:o|a)?\s*(?:fio|cor|lã)?\s+([a-záàâãéèêíïóôõöúçñ\s]{3,30})/i;
-
-    // Helper to create part
     const createNewPart = (name: string): ProjectPart => {
       let cleanName = name
         .replace(/^[#*•\-_0-9.:)]+\s*/, '')
@@ -248,42 +417,147 @@ export const PatternParserService = {
       // Ignore page indicators and separators
       if (line.startsWith('--- PÁGINA') || line.startsWith('===') || line.startsWith('***')) continue;
 
-      // Check for piece header match (explicit keyword match)
-      const isExplicitPart = explicitPartRegex.test(line);
+      const isColor = isColorOnlyText(line);
 
-      // Check for uppercase section header that is followed by round 1
-      let isFollowedByRound1 = false;
-      if (!isExplicitPart && line.length >= 3 && line.length <= 40 && !line.match(/\b(pb|aum|dim|corr|mpa|pa|pt|anel|mágico)\b/i)) {
-        // Look ahead 1-3 lines to see if round 1 begins
-        for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
-          const next = lines[j];
-          if (next.startsWith('--- PÁGINA')) continue;
-          if (roundLineRegex.test(next)) {
-            const m = next.match(roundLineRegex);
-            if (m && parseInt(m[1], 10) === 1) {
-              isFollowedByRound1 = true;
-              break;
-            }
-          }
-        }
-      }
-
-      if (isExplicitPart || isFollowedByRound1) {
-        if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
-          detectedParts.push(currentPart);
-        }
-        currentPart = createNewPart(line);
+      // 1. Color line handling:
+      // CRITICAL: NEVER SPLIT PIECES BY COLOR! Colors are color changes on the piece!
+      if (isColor) {
+        pendingColor = line.charAt(0).toUpperCase() + line.slice(1).trim();
         continue;
       }
 
-      // Check for round instruction
+      // 2. Check for explicit piece header
+      const pieceMatch = detectPieceTitle(line);
+      if (pieceMatch) {
+        if (pieceMatch.isSectionHeader) {
+          currentSectionHeading = pieceMatch.title;
+          continue;
+        }
+
+        // PRIMEIRA PERNA header: if currentPart already has rounds 1 to 8, it is Primeira Perna!
+        if (pieceMatch.isPerna1) {
+          if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
+            currentPart.name = 'Primeira Perna';
+          } else {
+            if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
+              detectedParts.push(currentPart);
+            }
+            currentPart = createNewPart('Primeira Perna');
+          }
+          currentSectionHeading = 'Pés e Pernas';
+          continue;
+        }
+
+        // SEGUNDA PERNA header: if currentPart already has rounds 1 to 8 of perna 2, update name!
+        if (pieceMatch.isPerna2) {
+          if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
+            currentPart.name = 'Segunda Perna';
+          } else {
+            if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
+              detectedParts.push(currentPart);
+            }
+            currentPart = createNewPart('Segunda Perna');
+          }
+          currentSectionHeading = 'Pés e Pernas';
+          continue;
+        }
+
+        // CORPO header: finishes current leg and starts body
+        if (pieceMatch.isCorpo) {
+          if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
+            detectedParts.push(currentPart);
+          }
+          currentSectionHeading = 'Corpo';
+          currentPart = createNewPart('Corpo');
+          continue;
+        }
+
+        // Any other explicit piece (e.g. Braços, Cabeça, Vestido)
+        if (currentPart && Object.keys(currentPart.roundInstructions || {}).length > 0) {
+          detectedParts.push(currentPart);
+        }
+        currentSectionHeading = pieceMatch.title;
+        currentPart = createNewPart(pieceMatch.title);
+        continue;
+      }
+
+      // 3. Check for sub-details / ruffles (e.g. "Prenda o fio na alça da volta 11 e faça: 1. saf em toda a volta (13)")
+      // ATTACH TO EXISTING ROUND NOTE — NEVER INCREMENT TARGET ROUNDS OF THE PIECE!
+      const isRuffleOrDetail = /\b(prenda o fio|na alca da volta|na alça da volta|alca que sobrou|alça que sobrou)\b/i.test(normalizeStr(line));
+      if (isRuffleOrDetail && currentPart) {
+        const roundNumMatch = line.match(/volta\s*["']?([0-9]{1,3})["']?/i);
+        const targetR = roundNumMatch ? parseInt(roundNumMatch[1], 10) : (currentPart.targetRounds || 1);
+        if (!currentPart.roundInstructions) currentPart.roundInstructions = {};
+        const existingNote = currentPart.roundInstructions[targetR] || '';
+        let detailText = `[Detalhe: ${line}`;
+
+        // Lookahead to consume the following "1. saf em toda a volta..." so it is NOT mistaken for Round 1!
+        if (i + 1 < lines.length) {
+          const nextLine = lines[i + 1];
+          if (/^(?:1[.)]\s*)?(?:saf|pb|corr|aum|dim)/i.test(nextLine) && !isColorOnlyText(nextLine)) {
+            detailText += ` -> ${nextLine}`;
+            i++; // skip next line
+          }
+        }
+        detailText += ']';
+        currentPart.roundInstructions[targetR] = existingNote ? `${existingNote}\n${detailText}` : detailText;
+        continue;
+      }
+
+      // 4. Handle Round instructions
       const roundMatch = line.match(roundLineRegex);
       if (roundMatch) {
         const startRound = parseInt(roundMatch[1], 10);
         if (isNaN(startRound) || startRound <= 0 || startRound > 999) continue;
 
+        // Doll structure check: legs finish at round 17. Round 18+ is the Corpo (torso) joining the legs!
+        if (
+          startRound >= 18 &&
+          currentPart &&
+          (currentPart.name.includes('Segunda Perna') || currentPart.name.includes('Perna') || currentSectionHeading.includes('Perna'))
+        ) {
+          detectedParts.push(currentPart);
+          currentSectionHeading = 'Corpo';
+          currentPart = createNewPart('Corpo');
+        }
+
+        // If startRound is 1 and currentPart already has 4+ rounds (a subsequent piece begins without explicit header)
+        if (startRound === 1 && currentPart && Object.keys(currentPart.roundInstructions || {}).length >= 4) {
+          detectedParts.push(currentPart);
+
+          let nextName = 'Parte ' + (detectedParts.length + 1);
+          if (currentPart.name.includes('Primeira Perna') || currentSectionHeading.includes('Perna')) {
+            nextName = 'Segunda Perna';
+          } else if (currentSectionHeading) {
+            nextName = currentSectionHeading;
+          }
+          currentPart = createNewPart(nextName);
+        }
+
         if (!currentPart) {
-          currentPart = createNewPart('Peça Principal');
+          let initialName = currentSectionHeading || 'Peça Principal';
+          if (initialName.includes('Perna')) {
+            initialName = 'Primeira Perna';
+          }
+          currentPart = createNewPart(initialName);
+        }
+
+        // Color reminder handling:
+        // CRITICAL: NEVER ADD A COLOR CHANGE ALERT ON ROUND 1!
+        // Round 1 is the starting color of the piece. Color changes only occur mid-piece (startRound > 1).
+        if (pendingColor && currentPart) {
+          if (startRound > 1) {
+            if (!currentPart.colorReminders.some((cr) => cr.round === startRound)) {
+              currentPart.colorReminders.push({
+                id: 'cr_' + Math.random().toString(36).substring(2, 6),
+                round: startRound,
+                colorName: pendingColor,
+                colorHex: getColorHex(pendingColor),
+                note: `Troca de cor: ${pendingColor}`,
+              });
+            }
+          }
+          pendingColor = null;
         }
 
         const endRound = roundMatch[2] ? parseInt(roundMatch[2], 10) : startRound;
@@ -297,23 +571,22 @@ export const PatternParserService = {
         if (stitchMatch) {
           stitches = parseInt(stitchMatch[1], 10);
         } else {
-          // Alternative check: find any (X) or [X] at the end
           const altMatch = instruction.match(/\(([0-9]{1,4})\)|\s+=\s*([0-9]{1,4})\s*$/);
           if (altMatch) {
             stitches = parseInt(altMatch[1] || altMatch[2], 10);
           }
         }
 
-        // Color reminder
+        // Color reminder inside instruction text (only for round > 1)
         const colorMatch = instruction.match(colorChangeRegex);
-        if (colorMatch && currentPart) {
+        if (colorMatch && currentPart && startRound > 1) {
           const rawColor = colorMatch[1].trim().slice(0, 30);
           if (rawColor && !['o', 'a', 'um', 'uma', 'para', 'com', 'no'].includes(rawColor.toLowerCase())) {
             currentPart.colorReminders.push({
               id: 'cr_' + Math.random().toString(36).substring(2, 6),
               round: startRound,
               colorName: rawColor.charAt(0).toUpperCase() + rawColor.slice(1),
-              colorHex: '#C85A32',
+              colorHex: getColorHex(rawColor),
               note: `Aviso da receita: "${instruction.slice(0, 80)}"`,
             });
           }
@@ -347,9 +620,59 @@ export const PatternParserService = {
       detectedParts.push(currentPart);
     }
 
-    // Fallback: If no parts with instructions were found, but text was read
-    if (detectedParts.length === 0) {
-      detectedParts.push({
+    // Post-processing: deduplication, clean-up, and correction
+    const cleanParts: ProjectPart[] = [];
+    const nameCounts: Record<string, number> = {};
+
+    for (const part of detectedParts) {
+      const roundNumbers = Object.keys(part.roundInstructions || {}).map(Number);
+      if (roundNumbers.length === 0) continue;
+
+      const minRound = Math.min(...roundNumbers);
+      const maxRound = Math.max(...roundNumbers);
+
+      // 1. Discard any color reminders on round 1
+      part.colorReminders = (part.colorReminders || []).filter((cr) => cr.round > 1);
+
+      // 2. If a part has only 1 color overall, it has ZERO color changes!
+      const uniqueColors = new Set(part.colorReminders.map((c) => c.colorName.toLowerCase()));
+      if (uniqueColors.size === 0) {
+        part.colorReminders = [];
+      }
+
+      // 3. Rename misnamed "Focinho" or "Nariz" (e.g. 26 rounds) to "Cabeça"
+      const normPartName = part.name.toLowerCase();
+      if (normPartName.includes('focinho') || normPartName.includes('nariz') || normPartName.includes('olho')) {
+        part.name = 'Cabeça';
+      }
+
+      // 4. Correct leg rounds: legs have 17 rounds. If minRound >= 18, it is the Corpo!
+      if (part.name.includes('Perna') && minRound >= 18) {
+        part.name = 'Corpo';
+      }
+
+      // Set targetRounds exactly to the highest recorded round
+      part.targetRounds = maxRound > 0 ? maxRound : part.targetRounds;
+      if (part.name.includes('Perna') && minRound === 1 && part.targetRounds > 17) {
+        part.targetRounds = 17;
+      }
+
+      // 5. Deduplicate names (e.g., if multiple pieces have the same name)
+      let finalName = part.name;
+      if (nameCounts[finalName]) {
+        nameCounts[finalName]++;
+        finalName = `${finalName} ${nameCounts[finalName]}`;
+      } else {
+        nameCounts[finalName] = 1;
+      }
+      part.name = finalName;
+
+      cleanParts.push(part);
+    }
+
+    // Fallback if no pieces found
+    if (cleanParts.length === 0) {
+      cleanParts.push({
         id: 'part_' + Math.random().toString(36).substring(2, 9),
         name: 'Peça Principal',
         targetRounds: 20,
@@ -370,7 +693,7 @@ export const PatternParserService = {
     }
 
     // Ensure all parts have targetStitches and reasonable defaults
-    for (const p of detectedParts) {
+    for (const p of cleanParts) {
       if (!p.targetStitches || p.targetStitches === 0) {
         p.targetStitches = p.roundStitches?.[1] || 6;
       }
@@ -381,7 +704,7 @@ export const PatternParserService = {
       detectedTitle,
       detectedHook,
       detectedYarn,
-      detectedParts,
+      detectedParts: cleanParts,
       warnings,
     };
   },

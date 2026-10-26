@@ -17,6 +17,7 @@ import {
   AlertCircle,
   Eye,
   RefreshCw,
+  Pencil,
 } from 'lucide-react';
 import { PdfCanvasViewer } from './PdfCanvasViewer';
 
@@ -59,7 +60,7 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
       if (res) {
         setPdfData({ fileName: res.fileName, blob: res.blob, url: res.url });
         currentUrl = res.url;
-      } else {
+      } else if (!pdfData?.blob) {
         setPdfData(null);
       }
     }
@@ -208,17 +209,62 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
       order: idx + 1,
     }));
 
-    onUpdateProject({
-      ...project,
-      parts: updatedParts,
-      activePartId: updatedParts[0].id,
-    });
+    const isFreeCounterFallback = !project || project.id === 'free_counter_pdf';
+    if (isFreeCounterFallback && onCreateProjectFromPdf) {
+      const newProjId = 'proj_' + Date.now();
+      const newProj: AmigurumiProject = {
+        id: newProjId,
+        title: extracted.detectedTitle || sanitizePatternTitle(pdfData?.fileName || 'Receita Amigurumi'),
+        patternName: pdfData?.fileName || 'receita.pdf',
+        hookSize: extracted.detectedHook || '2.5mm',
+        yarnBrand: extracted.detectedYarn || '',
+        category: 'Geral',
+        notes: 'Criado automaticamente a partir do PDF anexado.',
+        status: 'active',
+        parts: updatedParts,
+        activePartId: updatedParts[0]?.id || 'part_1',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (pdfData?.blob) {
+        PdfStorageService.savePdf(newProjId, pdfData.blob, pdfData.fileName);
+      }
+      onCreateProjectFromPdf(newProj);
+    } else {
+      if (pdfData?.blob && project?.id) {
+        PdfStorageService.savePdf(project.id, pdfData.blob, pdfData.fileName);
+      }
+      onUpdateProject({
+        ...project,
+        parts: updatedParts,
+        activePartId: updatedParts[0].id,
+      });
+    }
 
-    setSuccessMessage(`${updatedParts.length} peça(s) e instruções aplicadas no seu projeto!`);
+    setSuccessMessage(`${updatedParts.length} peça(s) aplicadas com sucesso! Abrindo tela dividida...`);
     setTimeout(() => {
       setSuccessMessage(null);
-      if (!isSplitMode) onClose();
-    }, 2000);
+      onToggleSplitMode();
+      onClose();
+    }, 400);
+  };
+
+  const handleRenamePart = (partId: string, newName: string) => {
+    if (!extracted) return;
+    setExtracted({
+      ...extracted,
+      detectedParts: extracted.detectedParts.map((p) =>
+        p.id === partId ? { ...p, name: newName } : p
+      ),
+    });
+  };
+
+  const handleDeleteExtractedPart = (partId: string) => {
+    if (!extracted) return;
+    setExtracted({
+      ...extracted,
+      detectedParts: extracted.detectedParts.filter((p) => p.id !== partId),
+    });
   };
 
   // If in Split Screen Mode (docked on desktop)
@@ -296,13 +342,16 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            {/* Split Screen button (Visible on desktop) */}
+            {/* Split Screen button */}
             <button
               onClick={() => {
+                if (pdfData?.blob && project?.id) {
+                  PdfStorageService.savePdf(project.id, pdfData.blob, pdfData.fileName);
+                }
                 onToggleSplitMode();
                 onClose();
               }}
-              className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-bold transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-stone-300 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-700 dark:text-stone-300 text-xs font-bold transition-colors cursor-pointer"
               title="Visualizar PDF lado a lado com o contador"
             >
               <Split className="w-3.5 h-3.5" />
@@ -485,9 +534,10 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
                     <button
                       onClick={handleApplyExtractedParts}
                       className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer active:scale-95 transition-all"
+                      title="Aplicar peças detectadas e abrir em tela dividida lado a lado com o PDF"
                     >
-                      <Check className="w-4 h-4 stroke-[3]" />
-                      Aplicar no Projeto Atual
+                      <Split className="w-4 h-4" />
+                      <span>Aplicar Peças & Dividir Tela</span>
                     </button>
                   </div>
 
@@ -499,13 +549,31 @@ export const PdfViewerModal: React.FC<PdfViewerModalProps> = ({
                           key={part.id}
                           className="p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 space-y-2"
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="font-bold text-sm text-stone-900 dark:text-stone-100">
-                              {part.name}
-                            </span>
-                            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-md">
-                              {part.targetRounds} voltas
-                            </span>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                              <input
+                                type="text"
+                                value={part.name}
+                                onChange={(e) => handleRenamePart(part.id, e.target.value)}
+                                className="font-bold text-sm text-stone-900 dark:text-stone-100 bg-transparent hover:bg-stone-200/60 dark:hover:bg-stone-700/60 focus:bg-white dark:focus:bg-stone-800 px-1.5 py-0.5 rounded-lg border border-transparent focus:border-amber-400 focus:outline-none transition-colors w-full"
+                                title="Clique para editar o nome desta peça"
+                              />
+                              <Pencil className="w-3 h-3 text-stone-400 shrink-0 pointer-events-none" />
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-950/60 px-2 py-0.5 rounded-md">
+                                {part.targetRounds} voltas
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteExtractedPart(part.id)}
+                                className="p-1 rounded-md text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer"
+                                title="Remover esta peça da extração"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           <p className="text-xs text-stone-500 dark:text-stone-400">

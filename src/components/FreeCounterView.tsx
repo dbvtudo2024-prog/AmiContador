@@ -69,20 +69,20 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
     }
   }, [counter.targetRounds]);
 
-  // Active color reminder for this round
-  const currentColorReminder = counter.colorReminders?.find(
-    (r) => r.round === counter.currentRound
-  );
+  // Active color reminder for this round: only for round > 1 (real color transitions)
+  const currentColorReminder =
+    counter.colorReminders?.find((r) => r.round === counter.currentRound && r.round > 1) || null;
 
   // Next upcoming color reminder
   const nextColorReminder = counter.colorReminders
-    ?.filter((r) => r.round > counter.currentRound)
+    ?.filter((r) => r.round > Math.max(1, counter.currentRound))
     ?.sort((a, b) => a.round - b.round)[0];
 
   // Check color change alert
   const checkColorAlert = useCallback(
     (roundNum: number) => {
-      const match = counter.colorReminders?.find((r) => r.round === roundNum);
+      if (roundNum <= 1) return; // Never alert on round 1!
+      const match = counter.colorReminders?.find((r) => r.round === roundNum && r.round > 1);
       if (match) {
         soundEffects.playColorChangeAlert(settings.soundEnabled, settings.soundVolume);
         soundEffects.vibrate([100, 50, 100], settings.vibrationEnabled);
@@ -493,11 +493,22 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
         </div>
       </div>
 
-      {/* Voice Recognition Feedback Alert */}
-      {voiceFeedback && (
-        <div className="px-3 py-1.5 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 text-xs font-bold flex items-center justify-center gap-2 shadow-xs animate-fade-in">
-          <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping" />
-          <span>Comando de voz: {voiceFeedback}</span>
+      {/* Voice Recognition Feedback & Guidance Alert */}
+      {isListening && (
+        <div className="px-3.5 py-2 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-xs flex items-center justify-between shadow-xs animate-fade-in">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse shrink-0" />
+            <span className="font-bold truncate">
+              {voiceFeedback ? `Comando: ${voiceFeedback}` : 'Mãos livres ativo: fale "ponto", "menos" ou "volta"'}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleVoiceControl}
+            className="text-[10px] font-bold text-rose-700 dark:text-rose-300 underline cursor-pointer ml-2 shrink-0"
+          >
+            Desativar
+          </button>
         </div>
       )}
 
@@ -669,8 +680,8 @@ export const FreeCounterView: React.FC<FreeCounterViewProps> = ({
         </div>
       ) : null}
 
-      {/* 4. THE MAIN CROCHET COUNTER CLICKER - Positioned high up without scrolling */}
-      <div className="stitched-card rounded-3xl p-4 sm:p-6 shadow-md space-y-4 relative overflow-hidden">
+      {/* 4. THE MAIN CROCHET COUNTER CLICKER - Sticky so buttons never disappear on scroll */}
+      <div className="stitched-card rounded-3xl p-4 sm:p-5 shadow-md space-y-3.5 relative overflow-hidden sticky top-0 z-10 bg-[#FAF5ED] dark:bg-stone-900 border border-[#D6C8B8] dark:border-stone-700">
         {/* Top bar inside counter: Jump & Status */}
         <div className="flex items-center justify-between gap-2 border-b border-[#EAE0D2] dark:border-stone-700/60 pb-2.5">
           <div>
