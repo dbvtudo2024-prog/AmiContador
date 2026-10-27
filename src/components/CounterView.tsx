@@ -32,6 +32,7 @@ interface CounterViewProps {
   onOpenPartsModal: () => void;
   onOpenPdfModal: () => void;
   onTriggerColorAlert: (reminder: ColorReminder, partName: string) => void;
+  onSwitchToFreeCounter?: () => void;
 }
 
 export const CounterView: React.FC<CounterViewProps> = ({
@@ -42,6 +43,7 @@ export const CounterView: React.FC<CounterViewProps> = ({
   onOpenPartsModal,
   onOpenPdfModal,
   onTriggerColorAlert,
+  onSwitchToFreeCounter,
 }) => {
   const [jumpRoundInput, setJumpRoundInput] = useState<string>('');
   const [showJumpModal, setShowJumpModal] = useState<boolean>(false);
@@ -321,8 +323,8 @@ export const CounterView: React.FC<CounterViewProps> = ({
           vibrationEnabled={settings.vibrationEnabled}
         />
 
-        {/* Voice Control Toggle & Status */}
-        <div className="flex items-center justify-between px-1">
+        {/* Voice Control Toggle & Switch to Free Counter */}
+        <div className="flex items-center justify-between px-1 gap-2">
           <button
             onClick={toggleVoiceControl}
             className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-xs ${
@@ -343,6 +345,17 @@ export const CounterView: React.FC<CounterViewProps> = ({
             )}
             <span>{isListening ? 'Ouvindo comandos de voz...' : 'Comando por Voz'}</span>
           </button>
+
+          {onSwitchToFreeCounter && (
+            <button
+              onClick={onSwitchToFreeCounter}
+              className="px-2.5 py-1.5 rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-xs font-bold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer active:scale-95 shrink-0"
+              title="Abrir o Contador Livre rápido sem projeto"
+            >
+              <span>⚡</span>
+              <span>Modo Livre</span>
+            </button>
+          )}
         </div>
 
         {/* Voice Feedback Alert */}

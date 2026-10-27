@@ -206,29 +206,59 @@ export const ProjectListModal: React.FC<ProjectListModalProps> = ({
 
         {/* Project List */}
         <div className="p-5 overflow-y-auto space-y-3 flex-1">
+          {/* Top Option: Switch to Free Counter */}
+          <div
+            onClick={() => {
+              onSelectFreeCounter();
+              onClose();
+            }}
+            className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+              activeProjectId === 'free'
+                ? 'bg-amber-100/70 border-amber-400 dark:bg-amber-950/50 dark:border-amber-600 shadow-sm'
+                : 'bg-stone-50 dark:bg-stone-800/40 border-stone-200 dark:border-stone-700/60 hover:bg-amber-50/50 dark:hover:bg-stone-800/80'
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs font-bold text-base">
+                ⚡
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-extrabold text-stone-900 dark:text-stone-100">
+                    Contador Livre (Sem Projeto)
+                  </h4>
+                  {activeProjectId === 'free' && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                      Em uso
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-stone-500 dark:text-stone-400 truncate">
+                  Contar pontos e voltas rápidas avulsas sem precisar selecionar projeto
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shrink-0 shadow-xs cursor-pointer active:scale-95"
+            >
+              Abrir
+            </button>
+          </div>
+
           {filteredProjects.length === 0 ? (
             <div className="text-center py-12 text-stone-400 space-y-3">
               <Sparkles className="w-12 h-12 mx-auto stroke-1 text-amber-500/60" />
               <div>
                 <p className="font-extrabold text-stone-800 dark:text-stone-200 text-sm">
-                  {projects.length === 0 ? 'App iniciado zerado!' : 'Nenhum projeto encontrado'}
+                  {projects.length === 0 ? 'Nenhum projeto cadastrado ainda' : 'Nenhum projeto encontrado'}
                 </p>
                 <p className="text-xs text-stone-500 dark:text-stone-400 mt-1 max-w-sm mx-auto">
                   {projects.length === 0
-                    ? 'Você está usando o Contador Livre (sem necessidade de cadastrar projeto). Pode apenas colocar quantas voltas tem e ir passando!'
+                    ? 'Você pode usar o Contador Livre acima ou criar seu primeiro projeto clicando em "Novo Projeto".'
                     : 'Ajuste sua busca ou crie um novo projeto.'}
                 </p>
-              </div>
-              <div className="flex items-center justify-center gap-2 pt-2">
-                <button
-                  onClick={() => {
-                    onSelectFreeCounter();
-                    onClose();
-                  }}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-md shadow-amber-500/20 cursor-pointer"
-                >
-                  Continuar no Contador Livre
-                </button>
               </div>
             </div>
           ) : (

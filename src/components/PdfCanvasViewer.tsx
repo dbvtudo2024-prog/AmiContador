@@ -174,7 +174,10 @@ const SinglePageCanvas: React.FC<SinglePageCanvasProps> = ({
     <div
       ref={containerRef}
       id={`pdf-page-${pageNum}`}
-      className="relative flex flex-col items-center my-2 sm:my-3 transition-all"
+      className="relative flex flex-col items-start my-2 sm:my-3 mx-auto transition-all"
+      style={{
+        width: pageDimensions.width > 0 ? `${pageDimensions.width}px` : 'auto',
+      }}
     >
       {/* Page Header / Number Badge */}
       <div className="w-full flex items-center justify-between px-2 py-1 mb-1 text-[11px] font-mono text-stone-400">
@@ -520,12 +523,16 @@ export const PdfCanvasViewer: React.FC<PdfCanvasViewerProps> = ({
         </div>
       </div>
 
-      {/* CONTINUOUS VERTICAL SCROLL VIEWPORT: All pages stacked vertically */}
+      {/* CONTINUOUS VERTICAL SCROLL VIEWPORT: All pages stacked vertically with full horizontal pan */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-y-auto overflow-x-auto p-2 sm:p-4 bg-[#292622] scroll-smooth"
+        className="flex-1 overflow-y-auto overflow-x-auto p-2 sm:p-4 bg-[#292622] touch-pan-x touch-pan-y"
+        style={{
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+        }}
       >
-        <div className="flex flex-col items-center min-h-full pb-20">
+        <div className="flex flex-col items-center min-h-full min-w-full w-max mx-auto pb-24">
           {pageNumbers.map((p) => (
             <SinglePageCanvas
               key={`${p}-${rotation}`}

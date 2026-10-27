@@ -512,15 +512,37 @@ export default function App() {
               </h1>
             </button>
 
-            {/* In counter mode: show project chip */}
+            {/* In counter mode: show project chip + quick switch to free counter */}
             {activeScreen === 'counter' && (
-              <button
-                onClick={() => setIsProjectsOpen(true)}
-                className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors truncate max-w-[100px] sm:max-w-[180px] cursor-pointer ml-1"
-                title="Trocar projeto ou modo livre"
-              >
-                {currentProject ? currentProject.title : 'Livre'} ▼
-              </button>
+              <div className="flex items-center gap-1.5 min-w-0 ml-1">
+                <button
+                  onClick={() => setIsProjectsOpen(true)}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#E2D6C5] dark:bg-stone-800 text-[#5C4B3E] dark:text-stone-300 hover:bg-[#D5C6B1] transition-colors truncate max-w-[85px] sm:max-w-[150px] cursor-pointer"
+                  title="Trocar de projeto ou abrir projetos"
+                >
+                  {currentProject ? currentProject.title : 'Livre'} ▼
+                </button>
+
+                {currentProject ? (
+                  <button
+                    onClick={handleSelectFreeCounter}
+                    className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white transition-all shadow-xs cursor-pointer flex items-center gap-1 active:scale-95 shrink-0"
+                    title="Alternar imediatamente para o Contador Livre (sem projeto)"
+                  >
+                    <span>⚡</span>
+                    <span className="hidden xs:inline">Modo Livre</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsProjectsOpen(true)}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#8C5E47] hover:bg-[#724A36] text-white transition-colors cursor-pointer flex items-center gap-1 shrink-0"
+                    title="Abrir um dos seus projetos salvos"
+                  >
+                    <span>🧶</span>
+                    <span className="hidden xs:inline">Projetos</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -658,6 +680,7 @@ export default function App() {
                     onOpenPartsModal={() => setIsPartsOpen(true)}
                     onOpenPdfModal={() => setIsPdfOpen(true)}
                     onTriggerColorAlert={handleTriggerColorAlert}
+                    onSwitchToFreeCounter={handleSelectFreeCounter}
                   />
                 ) : (
                   <FreeCounterView
@@ -686,6 +709,7 @@ export default function App() {
                 onOpenPartsModal={() => setIsPartsOpen(true)}
                 onOpenPdfModal={() => setIsPdfOpen(true)}
                 onTriggerColorAlert={handleTriggerColorAlert}
+                onSwitchToFreeCounter={handleSelectFreeCounter}
               />
             ) : (
               <FreeCounterView

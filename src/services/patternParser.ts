@@ -314,64 +314,67 @@ export const PatternParserService = {
       if (isColorOnlyText(clean)) return null;
       if (roundLineRegex.test(line)) return null;
 
+      // Genuine piece headers are short titles (1-4 words). Anything with 5+ words is an instruction!
+      if (clean.split(/\s+/).length > 4) return null;
+
       const norm = normalizeStr(clean);
 
-      // Exclude stitch instructions, finishing details, and facial embroidery (NEVER create pieces for these!)
+      // Exclude stitch instructions, action verbs, and finishing details (NEVER create pieces for these!)
       if (
-        /\b(anel magico|pb em toda|aum em toda|dim em toda|corte o fio|arremate|prenda o fio|saf em toda|bordar|borde|bordado|olhos?|nariz|focinho|boca|trava|seguranca|expressao|sobrancelha|cilios|costurar|costure)\b/.test(
+        /\b(anel magico|pb em toda|aum em toda|dim em toda|corte o fio|arremate|arrematar|prenda o fio|prender o fio|saf em toda|sat em toda|pbh em toda|adicione|adicionar|junte|juntar|una|unir|coloque|colocar|prenda|prender|costure|costurar|borde|bordar|bordado|olhos?|nariz|focinho|boca|trava|seguranca|expressao|sobrancelha|cilios|pegando|pegue|faça|fazer|encha|encher|enchimento|continuando|fechando|fechamento|insira|inserir|repita|repetir|trocar|mudar|linha|volta|carr|pontos|pts|pb|aum|dim)\b/.test(
           norm
         )
       ) {
         return null;
       }
 
-      // Specific piece matchers
-      if (norm.includes('primeira perna') || norm.includes('perna 1') || norm.includes('pe e perna 1')) {
+      // Specific piece matchers (must match the header itself, not an instruction mentioning the part)
+      if (norm === 'primeira perna' || norm === 'perna 1' || norm === 'pe e perna 1' || norm === '1a perna') {
         return { title: 'Primeira Perna', isPerna1: true };
       }
-      if (norm.includes('segunda perna') || norm.includes('perna 2') || norm.includes('pe e perna 2')) {
+      if (norm === 'segunda perna' || norm === 'perna 2' || norm === 'pe e perna 2' || norm === '2a perna') {
         return { title: 'Segunda Perna', isPerna2: true };
       }
       if (
-        norm.includes('uniao das pernas') ||
-        norm.includes('unindo as pernas') ||
-        norm.includes('juntando as pernas') ||
-        norm.includes('uniao de pernas') ||
         norm === 'corpo' ||
-        norm.includes('corpo') ||
+        norm === 'o corpo' ||
         norm === 'body' ||
-        norm.includes('cuerpo')
+        norm === 'cuerpo' ||
+        norm === 'uniao das pernas' ||
+        norm === 'unindo as pernas' ||
+        norm === 'juntando as pernas' ||
+        norm === 'uniao de pernas'
       ) {
         return { title: 'Corpo', isCorpo: true };
       }
-      if (norm.includes('braco') || norm.includes('arms') || norm.includes('brazo')) {
+      if (/^(?:os\s+)?(?:bracos?|arms?|brazos?)(?:\s*\(?2x\)?)?$/i.test(norm)) {
         return { title: 'Braços (2x)' };
       }
-      if (norm.includes('cabeca e corpo') || norm.includes('cabeca/corpo')) {
+      if (/^(?:a\s+)?cabeca\s+(?:e|\/)\s+corpo$/i.test(norm)) {
         return { title: 'Cabeça e Corpo' };
       }
-      if (norm.includes('cabeca') || norm === 'head' || norm.includes('cabeza')) {
+      if (/^(?:a\s+)?(?:cabeca|head|cabeza)$/i.test(norm)) {
         return { title: 'Cabeça' };
       }
-      if (norm.includes('vestido') || norm.includes('dress') || norm.includes('saia')) {
+      if (/^(?:o\s+)?(?:vestido|dress|saia)$/i.test(norm)) {
         return { title: 'Vestido' };
       }
-      if (norm.includes('avental') || norm.includes('apron')) {
+      if (/^(?:o\s+)?(?:avental|apron)$/i.test(norm)) {
         return { title: 'Avental' };
       }
-      if (norm.includes('cabelo') || norm.includes('hair') || norm.includes('peruca') || norm.includes('franja')) {
+      if (/^(?:o\s+)?(?:cabelo|hair|peruca|franja)$/i.test(norm)) {
         return { title: 'Cabelo' };
       }
-      if (norm.includes('laco') || norm.includes('bow')) {
+      if (/^(?:o\s+)?(?:laco|bow)$/i.test(norm)) {
         return { title: 'Laço' };
       }
-      if (norm.includes('calcinha') || norm.includes('shorts') || norm.includes('cueca')) {
+      if (/^(?:a\s+)?(?:calcinha|shorts|cueca)$/i.test(norm)) {
         return { title: 'Calcinha' };
       }
-      if (norm.includes('sapato') || norm.includes('shoe') || norm.includes('botinha') || norm.includes('meia')) {
+      if (/^(?:os\s+)?(?:sapatos?|shoes?|botinhas?|meias?)(?:\s*\(?2x\)?)?$/i.test(norm)) {
         return { title: 'Sapatos (2x)' };
       }
-      if (norm.includes('orelha') || norm.includes('ear') || norm.includes('oreja')) {
+      if (/^(?:as\s+)?(?:orelhas?|ears?|orejas?)(?:\s*\(?2x\)?)?$/i.test(norm)) {
         return { title: 'Orelhas (2x)' };
       }
       if (norm === 'pes e pernas' || norm === 'pe e perna' || norm === 'pernas') {
@@ -646,18 +649,38 @@ export const PatternParserService = {
         part.name = 'Cabeça';
       }
 
-      // 4. Correct leg rounds: legs have 17 rounds. If minRound >= 18, it is the Corpo!
-      if (part.name.includes('Perna') && minRound >= 18) {
+      // 4. Any piece with rounds >= 18 is the torso/Corpo (joining legs and attaching arms at rounds 32-33)
+      if (minRound >= 18) {
         part.name = 'Corpo';
-      }
-
-      // Set targetRounds exactly to the highest recorded round
-      part.targetRounds = maxRound > 0 ? maxRound : part.targetRounds;
-      if (part.name.includes('Perna') && minRound === 1 && part.targetRounds > 17) {
+      } else if (part.name.includes('Perna') && minRound === 1 && maxRound > 17) {
         part.targetRounds = 17;
       }
 
-      // 5. Deduplicate names (e.g., if multiple pieces have the same name)
+      // 5. MERGE DUPLICATE CORPO: If Corpo already exists, merge rounds directly into the single Corpo!
+      const existingCorpoIndex = cleanParts.findIndex((p) => p.name.toLowerCase() === 'corpo');
+      if (part.name.toLowerCase() === 'corpo' && existingCorpoIndex !== -1) {
+        const existingCorpo = cleanParts[existingCorpoIndex];
+        existingCorpo.roundInstructions = {
+          ...existingCorpo.roundInstructions,
+          ...part.roundInstructions,
+        };
+        existingCorpo.roundStitches = {
+          ...existingCorpo.roundStitches,
+          ...part.roundStitches,
+        };
+        existingCorpo.colorReminders = [
+          ...(existingCorpo.colorReminders || []),
+          ...(part.colorReminders || []),
+        ];
+        const allRounds = Object.keys(existingCorpo.roundInstructions).map(Number);
+        existingCorpo.targetRounds = Math.max(...allRounds);
+        continue; // Merged into the single Corpo! Do not create duplicate!
+      }
+
+      // Set targetRounds to the highest round in instructions
+      part.targetRounds = maxRound > 0 ? maxRound : part.targetRounds;
+
+      // 6. Deduplicate names for any other pieces
       let finalName = part.name;
       if (nameCounts[finalName]) {
         nameCounts[finalName]++;
